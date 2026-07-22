@@ -1,0 +1,371 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # ===========================================================================
+  # Build pre-compiled C libraries for all supported platforms
+  # ===========================================================================
+  build-libs:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: darwin-arm64
+            runner: macos-15
+            platform: darwin_arm64
+            lib_name: libzvec_c_api.dylib
+            artifact_name: zvec-libs-darwin-arm64
+
+          - name: linux-x64
+            runner: ubuntu-24.04
+            platform: linux_amd64
+            lib_name: libzvec_c_api.so
+            artifact_name: zvec-libs-linux-x64
+
+          - name: windows-x64
+            runner: windows-2025
+            platform: windows_amd64
+            lib_name: zvec_c_api.dll
+            artifact_name: zvec-libs-windows-x64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+
+      # --- Unix build tools ---
+      - name: Set up Python (for CMake / Ninja)
+        if: runner.os != 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build tools (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          python -m pip install --upgrade pip cmake==3.30.0 ninja==1.11.1
+          echo "$(python -c 'import site; print(site.USER_BASE)')/bin" >> $GITHUB_PATH
+        shell: bash
+
+      # --- Windows build tools ---
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install CMake and Ninja (Windows)
+        if: runner.os == 'Windows'
+        run: pip install cmake==3.30.0 ninja==1.11.1
+        shell: pwsh
+
+      # --- Build C-API library ---
+      - name: Build C-API library (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+          cd zvec
+          mkdir -p build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_C_BINDINGS=ON \
+            -G Ninja
+          cmake --build . -j$NPROC --target zvec_c_api
+        shell: bash
+
+      - name: Build C-API library (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd zvec
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
+          cmake --build . --target zvec_c_api -j $env:NUMBER_OF_PROCESSORS
+        shell: pwsh
+
+      # --- Package libraries ---
+      - name: Package libraries (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          mkdir -p staging/$PLATFORM staging/include/zvec
+
+          # Copy shared library
+          cp zvec/build/lib/${{ matrix.lib_name }} staging/$PLATFORM/
+          echo "✓ Copied ${{ matrix.lib_name }}"
+
+          # Copy public header
+          cp zvec/src/include/zvec/c_api.h staging/include/zvec/
+          echo "✓ Copied c_api.h"
+
+          ls -la staging/$PLATFORM/
+          du -h staging/$PLATFORM/${{ matrix.lib_name }}
+        shell: bash
+
+      - name: Package libraries (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $platform = "${{ matrix.platform }}"
+          New-Item -ItemType Directory -Force -Path "staging/$platform"   | Out-Null
+          New-Item -ItemType Directory -Force -Path "staging/include/zvec" | Out-Null
+
+          # Find DLL (location varies by CMake generator)
+          $dllCandidates = @(
+            "zvec/build/lib/Release/zvec_c_api.dll",
+            "zvec/build/lib/zvec_c_api.dll",
+            "zvec/build/bin/Release/zvec_c_api.dll"
+          )
+          $found = $false
+          foreach ($p in $dllCandidates) {
+            if (Test-Path $p) {
+              Copy-Item $p "staging/$platform/"
+              Write-Host "✓ Copied DLL from $p"
+              $found = $true; break
+            }
+          }
+          if (-not $found) {
+            Write-Error "DLL not found"
+            Get-ChildItem -Recurse zvec/build/ -Filter *.dll
+            exit 1
+          }
+
+          # Import library (.lib) – optional but useful for downstream C/C++ consumers
+          $libCandidates = @(
+            "zvec/build/lib/Release/zvec_c_api.lib",
+            "zvec/build/lib/zvec_c_api.lib"
+          )
+          foreach ($p in $libCandidates) {
+            if (Test-Path $p) {
+              Copy-Item $p "staging/$platform/"
+              Write-Host "✓ Copied import lib from $p"
+              break
+            }
+          }
+
+          # Public header
+          Copy-Item "zvec/src/include/zvec/c_api.h" "staging/include/zvec/"
+          Write-Host "✓ Copied c_api.h"
+
+          Get-ChildItem "staging/$platform/"
+        shell: pwsh
+
+      # --- Verify Maven build compiles against staged vendor libs ---
+      - name: Verify Maven compile with vendor libs (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          mkdir -p lib/$PLATFORM lib/include/zvec
+          cp staging/$PLATFORM/* lib/$PLATFORM/
+          cp staging/include/zvec/c_api.h lib/include/zvec/
+
+          LIB_PATH="${{ github.workspace }}/lib/$PLATFORM"
+          mvn compile -Dzvec.lib.path="$LIB_PATH" -B
+          echo "✓ Maven compile succeeded with vendor libraries"
+        shell: bash
+
+      - name: Verify Maven compile with vendor libs (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $platform = "${{ matrix.platform }}"
+          New-Item -ItemType Directory -Force -Path "lib/$platform"    | Out-Null
+          New-Item -ItemType Directory -Force -Path "lib/include/zvec" | Out-Null
+          Copy-Item "staging/$platform/*" "lib/$platform/"
+          Copy-Item "staging/include/zvec/c_api.h" "lib/include/zvec/"
+
+          $libPath = "${{ github.workspace }}\lib\$platform"
+          $env:PATH = "$libPath;$env:PATH"
+
+          mvn compile "-Dzvec.lib.path=$libPath" -B
+          Write-Host "✓ Maven compile succeeded with vendor libraries"
+        shell: pwsh
+
+      # --- Create release archive ---
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd staging
+          tar -czf ../${{ matrix.artifact_name }}.tar.gz .
+          cd ..
+          sha256sum ${{ matrix.artifact_name }}.tar.gz > ${{ matrix.artifact_name }}.tar.gz.sha256
+          echo "=== Archive ==="
+          ls -la ${{ matrix.artifact_name }}.tar.gz
+          cat ${{ matrix.artifact_name }}.tar.gz.sha256
+        shell: bash
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd staging
+          Compress-Archive -Path * -DestinationPath ..\${{ matrix.artifact_name }}.zip
+          cd ..
+          $hash = (Get-FileHash "${{ matrix.artifact_name }}.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  ${{ matrix.artifact_name }}.zip" | Out-File -Encoding ascii "${{ matrix.artifact_name }}.zip.sha256"
+          Write-Host "=== Archive ==="
+          Get-ChildItem "${{ matrix.artifact_name }}.zip"
+          Get-Content "${{ matrix.artifact_name }}.zip.sha256"
+        shell: pwsh
+
+      # --- Upload artifact for the release job ---
+      - name: Upload artifact (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ${{ matrix.artifact_name }}.tar.gz
+            ${{ matrix.artifact_name }}.tar.gz.sha256
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ${{ matrix.artifact_name }}.zip
+            ${{ matrix.artifact_name }}.zip.sha256
+
+  # ===========================================================================
+  # Build the Maven JAR — delegated to the standalone "Publish JAR" workflow
+  # (.github/workflows/publish-jar.yml) so it can also be triggered manually on
+  # its own. Artifacts it uploads (zvec-java-jars) are available to the release
+  # job within this same run.
+  # ===========================================================================
+  build-jar:
+    name: Build JAR
+    needs: build-libs
+    uses: ./.github/workflows/publish-jar.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+
+  # ===========================================================================
+  # Create GitHub Release with all platform libraries + JAR
+  # ===========================================================================
+  release:
+    name: Create Release
+    needs: [ build-libs, build-jar ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: List artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find ./artifacts -type f | sort
+        shell: bash
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#v}"
+          cat > release-notes.md << EOF
+          ## zvec-java ${TAG}
+
+          Industrial-grade Java bindings for the [Zvec](https://github.com/zvec-ai/zvec) vector database C API.
+
+          ### Pre-built C Libraries
+
+          Download the archive for your platform and extract it to the \`lib/\` directory of your project:
+
+          | Platform | Archive | Architecture |
+          |----------|---------|--------------|
+          | **macOS** | \`zvec-libs-darwin-arm64.tar.gz\` | Apple Silicon (arm64) |
+          | **Linux** | \`zvec-libs-linux-x64.tar.gz\` | x86-64 |
+          | **Windows** | \`zvec-libs-windows-x64.zip\` | x86-64 |
+
+          ### Maven JAR
+
+          The \`zvec-java-${VERSION}.jar\` contains the Java binding (requires JNA at runtime).
+          The \`zvec-java-${VERSION}-with-dependencies.jar\` is a self-contained fat jar.
+
+          ### Maven Dependency
+
+          \`\`\`xml
+          <dependency>
+              <groupId>io.zvec</groupId>
+              <artifactId>zvec-java</artifactId>
+              <version>${VERSION}</version>
+          </dependency>
+          \`\`\`
+
+          ### Quick Start
+
+          \`\`\`bash
+          # Extract pre-built library to lib/<platform>/
+          tar -xzf zvec-libs-linux-x64.tar.gz -C lib/
+
+          # Run with vendor library
+          mvn test -Dzvec.lib.path=lib/linux_amd64
+          \`\`\`
+
+          ### SHA-256 Checksums
+
+          See the \`.sha256\` files attached to this release for verification.
+          EOF
+          echo "notes_file=release-notes.md" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Collect release assets
+        run: |
+          mkdir -p release-assets
+          # Platform libraries
+          find ./artifacts -name "*.tar.gz" -o -name "*.tar.gz.sha256" \
+               -o -name "*.zip"    -o -name "*.zip.sha256" | while read f; do
+            cp "$f" release-assets/
+          done
+          # JAR files
+          find ./artifacts/zvec-java-jars -name "*.jar" | while read f; do
+            cp "$f" release-assets/
+          done
+          echo "=== Release assets ==="
+          ls -lh release-assets/
+        shell: bash
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "zvec-java ${{ steps.tag.outputs.tag }}"
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.tag, '-') }}
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

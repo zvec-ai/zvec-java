@@ -1,0 +1,239 @@
+name: Publish JAR
+
+# Builds (and uploads) a TRUE multi-platform zvec-java fat JAR.
+#
+# Strategy (mirrors, and improves on, the seqeralabs/zvec-java packaging model):
+#   1. build-natives — a matrix job builds the zvec C-API library and the
+#      JavaCPP JNI glue on every supported platform, then stages the per-platform
+#      native bundle (target/classes/<javacpp-platform>/) as an artifact. The
+#      zvec C build is cached with a key anchored to the zvec submodule commit,
+#      so a submodule bump automatically invalidates the cache.
+#   2. build-jar — a single job downloads every platform's native bundle, drops
+#      them into src/main/resources/<platform>/ and packages ONE fat JAR that
+#      contains the libraries for all platforms. JavaCPP code generation is
+#      skipped here (-Djavacpp.skip=true) because the committed ZvecNative.java
+#      and the already-compiled JNI glue are reused — no C toolchain required.
+#
+# The workflow is standalone (workflow_dispatch) and reusable (workflow_call by
+# the Release workflow). Its final artifact is "zvec-java-jars".
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag / version (e.g., v1.0.0)'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag / version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # ===========================================================================
+  # Build the native bundle (zvec_c_api + jnizvec glue) for each platform
+  # ===========================================================================
+  build-natives:
+    name: Natives (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: darwin-arm64
+            runner: macos-15
+          - name: linux-x64
+            runner: ubuntu-24.04
+          - name: windows-x64
+            runner: windows-2025
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+
+      # --- Version-anchored cache: keyed by the zvec submodule commit ---
+      - name: Resolve zvec submodule commit
+        id: zvec
+        shell: bash
+        run: echo "sha=$(git -C zvec rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache zvec build
+        id: cache-zvec
+        uses: actions/cache@v4
+        with:
+          path: zvec/build
+          key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
+
+      # --- Unix build toolchain ---
+      - name: Set up Python (for CMake / Ninja)
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build tools (Unix)
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip cmake==3.30.0 ninja==1.11.1
+          echo "$(python -c 'import site; print(site.USER_BASE)')/bin" >> $GITHUB_PATH
+
+      # --- Windows build toolchain ---
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install CMake and Ninja (Windows)
+        if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: pip install cmake==3.30.0 ninja==1.11.1
+
+      # --- Build the zvec C-API library (skipped on cache hit) ---
+      - name: Build C-API library (Unix)
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+          cd zvec
+          mkdir -p build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
+          cmake --build . -j$NPROC --target zvec_c_api
+
+      - name: Build C-API library (Windows)
+        if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          cd zvec
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
+          cmake --build . --target zvec_c_api -j $env:NUMBER_OF_PROCESSORS
+
+      # --- Locate the directory that holds the built library / import lib ---
+      - name: Resolve zvec lib directory
+        shell: bash
+        run: |
+          for d in \
+            "$GITHUB_WORKSPACE/zvec/build/lib/Release" \
+            "$GITHUB_WORKSPACE/zvec/build/lib" \
+            "$GITHUB_WORKSPACE/zvec/build/bin/Release" \
+            "$GITHUB_WORKSPACE/zvec/build/bin"; do
+            if [ -d "$d" ] && ls "$d"/*zvec_c_api* >/dev/null 2>&1; then
+              echo "ZVEC_LIB_DIR=$d" >> "$GITHUB_ENV"
+              echo "Using zvec lib dir: $d"
+              break
+            fi
+          done
+
+      # --- Compile the JavaCPP JNI glue and copy libs into target/classes ---
+      - name: Build JNI glue (mvn package)
+        shell: bash
+        run: mvn package -DskipTests -Dzvec.lib.path="$ZVEC_LIB_DIR" -B
+
+      # --- Stage the JavaCPP platform bundle for aggregation ---
+      - name: Stage native bundle
+        id: stage
+        shell: bash
+        run: |
+          PLATDIR=$(find target/classes -mindepth 1 -maxdepth 1 -type d -name '*-*' | head -n1)
+          if [ -z "$PLATDIR" ]; then
+            echo "::error::No JavaCPP platform directory found under target/classes"
+            ls -la target/classes || true
+            exit 1
+          fi
+          PLATNAME=$(basename "$PLATDIR")
+          echo "JavaCPP platform: $PLATNAME"
+          mkdir -p "staging/$PLATNAME"
+          cp "$PLATDIR"/* "staging/$PLATNAME/"
+          echo "=== Staged native bundle ($PLATNAME) ==="
+          ls -la "staging/$PLATNAME/"
+
+      - name: Upload native bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: natives-${{ matrix.name }}
+          path: staging/
+
+  # ===========================================================================
+  # Aggregate every platform bundle into a single multi-platform fat JAR
+  # ===========================================================================
+  build-jar:
+    name: Build JAR
+    needs: build-natives
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        # No submodules: JavaCPP code generation is skipped and the committed
+        # ZvecNative.java is reused, so the zvec headers are not needed here.
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+
+      - name: Download all native bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: natives-*
+          path: native-artifacts
+
+      - name: Stage native libraries into resources
+        shell: bash
+        run: |
+          mkdir -p src/main/resources
+          # Each artifact contains a single <javacpp-platform>/ directory.
+          find native-artifacts -mindepth 2 -maxdepth 2 -type d -exec cp -r {} src/main/resources/ \;
+          echo "=== Bundled platforms ==="
+          ls -la src/main/resources/
+          find src/main/resources -type f | sort
+
+      - name: Set project version from tag
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag }}"
+          VERSION="${TAG#v}"
+          mvn versions:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false -B
+          echo "Set Maven version to $VERSION"
+
+      # Skip JavaCPP codegen (-Djavacpp.skip=true): reuse the committed
+      # ZvecNative.java and the pre-built JNI glue staged above. The shade plugin
+      # bundles every src/main/resources/<platform>/ directory into the fat JAR.
+      - name: Build multi-platform fat JAR
+        shell: bash
+        run: mvn package -DskipTests -Djavacpp.skip=true -B
+
+      - name: Verify JAR bundles all platforms
+        shell: bash
+        run: |
+          JAR=$(ls target/zvec-java-*-with-dependencies.jar | head -n1)
+          echo "=== Native libraries inside $JAR ==="
+          jar tf "$JAR" | grep -E '(macosx|linux|windows).*\.(dylib|so|dll)$' | sort
+          for p in macosx linux windows; do
+            if ! jar tf "$JAR" | grep -qE "${p}.*\.(dylib|so|dll)$"; then
+              echo "::warning::No native library found for platform '$p' in the fat JAR"
+            fi
+          done
+
+      - name: Upload JAR artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zvec-java-jars
+          path: |
+            target/zvec-java-*.jar

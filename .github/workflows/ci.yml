@@ -1,0 +1,286 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ===========================================================================
+  # Source Mode: Build zvec C library from submodule, then run full test suite
+  # ===========================================================================
+  source-test:
+    name: Source (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            runner: macos-15
+          - name: linux-x64
+            runner: ubuntu-24.04
+          - name: windows-x64
+            runner: windows-2025
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # --- Set up Java ---
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+
+      # --- Version-anchored cache: keyed by the zvec submodule commit ---
+      - name: Resolve zvec submodule commit
+        id: zvec
+        shell: bash
+        run: echo "sha=$(git -C zvec rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache zvec build
+        id: cache-zvec
+        uses: actions/cache@v4
+        with:
+          path: zvec/build
+          key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
+
+      # --- Unix build tools ---
+      - name: Set up Python (for CMake / Ninja)
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build tools (Unix)
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --upgrade pip cmake==3.30.0 ninja==1.11.1
+          echo "$(python -c 'import site; print(site.USER_BASE)')/bin" >> $GITHUB_PATH
+        shell: bash
+
+      # --- Windows build tools ---
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install CMake and Ninja (Windows)
+        if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        run: pip install cmake==3.30.0 ninja==1.11.1
+        shell: pwsh
+
+      # --- Build C-API library ---
+      - name: Build C-API library (Unix)
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        run: |
+          NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+          cd zvec
+          mkdir -p build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_C_BINDINGS=ON \
+            -G Ninja
+          cmake --build . -j$NPROC --target zvec_c_api
+        shell: bash
+
+      - name: Build C-API library (Windows)
+        if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        run: |
+          cd zvec
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
+          cmake --build . --target zvec_c_api -j $env:NUMBER_OF_PROCESSORS
+        shell: pwsh
+
+      - name: Verify C-API library (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          echo "=== Built libraries ==="
+          ls -la zvec/build/lib/
+        shell: bash
+
+      - name: Verify C-API library (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Write-Host "=== Built libraries ==="
+          Get-ChildItem -Recurse zvec/build/ -Include *.dll,*.lib -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+        shell: pwsh
+
+      # --- Add DLL to PATH (Windows runtime) ---
+      - name: Add C-API library to PATH (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $dirs = @(
+            "${{ github.workspace }}\zvec\build\lib\Release",
+            "${{ github.workspace }}\zvec\build\lib",
+            "${{ github.workspace }}\zvec\build\bin\Release",
+            "${{ github.workspace }}\zvec\build\bin"
+          )
+          foreach ($d in $dirs) {
+            if (Test-Path $d) {
+              echo "$d" >> $env:GITHUB_PATH
+              Write-Host "Added to PATH: $d"
+            }
+          }
+        shell: pwsh
+
+      # --- Run tests (Maven) ---
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          LIB_PATH="${{ github.workspace }}/zvec/build/lib"
+          mvn test -Dzvec.lib.path="$LIB_PATH" -B
+        shell: bash
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # Locate the built DLL directory
+          $candidates = @(
+            "${{ github.workspace }}\zvec\build\lib\Release",
+            "${{ github.workspace }}\zvec\build\lib"
+          )
+          $libPath = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          Write-Host "Using lib path: $libPath"
+          mvn test "-Dzvec.lib.path=$libPath" -B
+        shell: pwsh
+
+      # --- Check formatting (Unix only – no gofmt equivalent needed on Windows) ---
+      - name: Check Java formatting (Checkstyle)
+        if: runner.os != 'Windows'
+        run: mvn checkstyle:check -B
+        continue-on-error: true
+
+  # ===========================================================================
+  # Vendor Mode: Test with pre-built libraries shipped in lib/ directory
+  # ===========================================================================
+  vendor-test:
+    name: Vendor (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            runner: macos-15
+            lib_subdir: darwin_arm64
+            lib_ext: dylib
+          - name: linux-x64
+            runner: ubuntu-24.04
+            lib_subdir: linux_amd64
+            lib_ext: so
+          - name: windows-x64
+            runner: windows-2025
+            lib_subdir: windows_amd64
+            lib_ext: dll
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+
+      # --- Check vendor libs availability ---
+      - name: Verify vendor libraries exist (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          LIB_PATH="lib/${{ matrix.lib_subdir }}"
+          echo "=== Checking vendor libraries in $LIB_PATH ==="
+          if [ ! -d "$LIB_PATH" ] || [ -z "$(ls -A "$LIB_PATH" 2>/dev/null)" ]; then
+            echo "⚠ No vendor libraries found in $LIB_PATH — skipping vendor test"
+            echo "VENDOR_LIBS_AVAILABLE=false" >> $GITHUB_ENV
+          else
+            ls -la "$LIB_PATH/"
+            echo "VENDOR_LIBS_AVAILABLE=true" >> $GITHUB_ENV
+          fi
+        shell: bash
+
+      - name: Verify vendor libraries exist (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $libPath = "lib\${{ matrix.lib_subdir }}"
+          Write-Host "=== Checking vendor libraries in $libPath ==="
+          if (-not (Test-Path $libPath) -or (Get-ChildItem $libPath -ErrorAction SilentlyContinue).Count -eq 0) {
+            Write-Host "⚠ No vendor libraries found in $libPath — skipping vendor test"
+            echo "VENDOR_LIBS_AVAILABLE=false" >> $env:GITHUB_ENV
+          } else {
+            Get-ChildItem $libPath
+            echo "VENDOR_LIBS_AVAILABLE=true" >> $env:GITHUB_ENV
+          }
+        shell: pwsh
+
+      # --- Set library search paths ---
+      - name: Set library path (macOS)
+        if: runner.os == 'macOS' && env.VENDOR_LIBS_AVAILABLE == 'true'
+        run: |
+          LIB_PATH="${{ github.workspace }}/lib/${{ matrix.lib_subdir }}"
+          echo "DYLD_LIBRARY_PATH=$LIB_PATH:${DYLD_LIBRARY_PATH:-}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Set library path (Linux)
+        if: runner.os == 'Linux' && env.VENDOR_LIBS_AVAILABLE == 'true'
+        run: |
+          LIB_PATH="${{ github.workspace }}/lib/${{ matrix.lib_subdir }}"
+          echo "LD_LIBRARY_PATH=$LIB_PATH:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Add vendor library to PATH (Windows)
+        if: runner.os == 'Windows' && env.VENDOR_LIBS_AVAILABLE == 'true'
+        run: |
+          $libPath = "${{ github.workspace }}\lib\${{ matrix.lib_subdir }}"
+          echo "$libPath" >> $env:GITHUB_PATH
+          Write-Host "Added to PATH: $libPath"
+        shell: pwsh
+
+      # --- Run tests ---
+      # JavaCPP still needs to parse c_api.h and compile the JNI glue in vendor
+      # mode, so point it at the header shipped alongside the pre-built libs
+      # (lib/include/zvec/c_api.h) and link against the vendored library.
+      - name: Run tests (Unix, vendor mode)
+        if: runner.os != 'Windows' && env.VENDOR_LIBS_AVAILABLE == 'true'
+        run: |
+          LIB_PATH="${{ github.workspace }}/lib/${{ matrix.lib_subdir }}"
+          INC_PATH="${{ github.workspace }}/lib/include"
+          mvn test -Dzvec.lib.path="$LIB_PATH" -Dzvec.include.path="$INC_PATH" -B
+        shell: bash
+
+      - name: Run tests (Windows, vendor mode)
+        if: runner.os == 'Windows' && env.VENDOR_LIBS_AVAILABLE == 'true'
+        run: |
+          $libPath = "${{ github.workspace }}\lib\${{ matrix.lib_subdir }}"
+          $incPath = "${{ github.workspace }}\lib\include"
+          mvn test "-Dzvec.lib.path=$libPath" "-Dzvec.include.path=$incPath" -B
+        shell: pwsh
+
+      - name: Skip notice
+        if: env.VENDOR_LIBS_AVAILABLE == 'false'
+        run: echo "ℹ Vendor test skipped — no pre-built libraries committed to lib/${{ matrix.lib_subdir }}"
+        shell: bash

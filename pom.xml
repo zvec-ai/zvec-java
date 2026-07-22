@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.zvec</groupId>
+    <artifactId>zvec-java</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>zvec-java</name>
+    <description>Industrial-grade Java bindings for the Zvec in-process vector database C API (JavaCPP/JNI)</description>
+
+    <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <javacpp.version>1.5.11</javacpp.version>
+        <junit.version>5.10.2</junit.version>
+
+        <!-- Location of the Zvec core (git submodule at ./zvec). Override for local
+             builds that reuse a sibling checkout, e.g. -Dzvec.home=/path/to/zvec -->
+        <zvec.home>${project.basedir}/zvec</zvec.home>
+        <zvec.include.path>${zvec.home}/src/include</zvec.include.path>
+        <zvec.lib.path>${zvec.home}/build/lib</zvec.lib.path>
+
+        <!-- Auto-detected build platform (e.g. macosx-arm64, linux-x86_64, windows-x86_64) -->
+        <javacpp.platform>${os.name}-${os.arch}</javacpp.platform>
+    </properties>
+
+    <dependencies>
+        <!-- JavaCPP: JNI code generation + cross-platform native loading -->
+        <dependency>
+            <groupId>org.bytedeco</groupId>
+            <artifactId>javacpp</artifactId>
+            <version>${javacpp.version}</version>
+        </dependency>
+
+        <!-- JUnit 5 for testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Step 1: pre-compile ONLY the JavaCPP preset config class so the
+                 parser (step 2) can load it as an InfoMapper. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.12.1</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>compile-presets</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>io/zvec/binding/presets/*.java</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- JavaCPP: parse c_api.h to generate ZvecNative.java, then generate
+                 and compile the JNI glue library (libjnizvec.*). -->
+            <plugin>
+                <groupId>org.bytedeco</groupId>
+                <artifactId>javacpp</artifactId>
+                <version>${javacpp.version}</version>
+                <configuration>
+                    <includePaths>
+                        <includePath>${zvec.include.path}</includePath>
+                    </includePaths>
+                    <linkPaths>
+                        <linkPath>${zvec.lib.path}</linkPath>
+                    </linkPaths>
+                    <copyLibs>true</copyLibs>
+                    <copyResources>true</copyResources>
+                </configuration>
+                <executions>
+                    <!-- 2a. Parser: InfoMapper -> generated ZvecNative.java -->
+                    <execution>
+                        <id>javacpp-parser</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>build</goal>
+                        </goals>
+                        <configuration>
+                            <classOrPackageNames>
+                                <classOrPackageName>io.zvec.binding.presets.ZvecConfig</classOrPackageName>
+                            </classOrPackageNames>
+                            <outputDirectory>${project.build.sourceDirectory}</outputDirectory>
+                        </configuration>
+                    </execution>
+                    <!-- 2b. Generator + Compiler: ZvecNative -> JNI cpp -> libjnizvec.* -->
+                    <execution>
+                        <id>javacpp-compiler</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>build</goal>
+                        </goals>
+                        <configuration>
+                            <classOrPackageNames>
+                                <classOrPackageName>io.zvec.binding.ZvecNative</classOrPackageName>
+                            </classOrPackageNames>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <!-- The JNI glue (jniZvecNative) and zvec_c_api are bundled under
+                         target/classes/<platform>/ by the javacpp plugin and loaded from
+                         the classpath at runtime; exposing the lib dir also lets the
+                         dynamic linker resolve zvec_c_api (@rpath) during local runs. -->
+                    <argLine>-Djava.library.path=${zvec.lib.path}</argLine>
+                    <environmentVariables>
+                        <DYLD_LIBRARY_PATH>${zvec.lib.path}</DYLD_LIBRARY_PATH>
+                        <LD_LIBRARY_PATH>${zvec.lib.path}</LD_LIBRARY_PATH>
+                    </environmentVariables>
+                    <useModulePath>false</useModulePath>
+                </configuration>
+            </plugin>
+
+            <!-- Fat jar (example runner + bundled native libs). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.2</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>io.zvec.binding.examples.BasicExample</mainClass>
+                                </transformer>
+                            </transformers>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>with-dependencies</shadedClassifierName>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
