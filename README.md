@@ -196,10 +196,10 @@ IndexParams invert = IndexParams.createInvert(true, false); // inverted, for tex
 
 ## Dependencies
 
-| Dependency | Version | Purpose |
-|------------|---------|---------|
-| `org.bytedeco:javacpp` | 1.5.11 | JNI code generation + cross-platform native loading |
-| `org.junit.jupiter:junit-jupiter` | 5.10.2 | Unit tests (test scope only) |
+| Dependency | Version | Purpose | License |
+|------------|---------|---------|---------|
+| `org.bytedeco:javacpp` | 1.5.11 | JNI code generation + cross-platform native loading | Apache-2.0 **or** GPL-2.0-or-later **or** GPL-2.0-with-classpath-exception; used under Apache-2.0 |
+| `org.junit.jupiter:junit-jupiter` | 5.10.2 | Unit tests (test scope only) | EPL-2.0 |
 
 ## Architecture
 
@@ -257,4 +257,18 @@ The Zvec C API provides no document-level validation function (`zvec_doc_validat
 
 ## License
 
-Consistent with the main Zvec project; see [zvec/LICENSE](zvec/LICENSE).
+This project is licensed under the **Apache License 2.0**, consistent with the main Zvec project; see [zvec/LICENSE](zvec/LICENSE).
+
+### Third-party license notes
+
+- **JavaCPP** (`org.bytedeco:javacpp:1.5.11) is triple-licensed:
+  `Apache-2.0 OR GPL-2.0-or-later OR GPL-2.0-with-classpath-exception`.
+  This project uses JavaCPP under the **Apache-2.0** terms.
+- **JUnit 5** is used only in the `test` scope and is licensed under the EPL-2.0.
+  It is not included in the released JAR.
+- The native `zvec_c_api` library (built from the `zvec` submodule) may include
+  third-party code such as **RocksDB**. Some RocksDB components (for example the
+  PerconaFT-derived `range_tree` code under `utilities/transactions/lock/range/`)
+  are under GPL/AGPL-style licenses. Distributors of binary packages should
+  verify that the `zvec` core is built in a way that is compatible with their
+  desired license terms.

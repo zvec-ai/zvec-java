@@ -13,6 +13,14 @@
     <name>zvec-java</name>
     <description>Industrial-grade Java bindings for the Zvec in-process vector database C API (JavaCPP/JNI)</description>
 
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
@@ -32,29 +40,25 @@
     </properties>
 
     <dependencies>
-        <!-- JavaCPP: JNI code generation + cross-platform native loading -->
+        <!--
+            JavaCPP: JNI code generation + cross-platform native loading.
+            JavaCPP 1.5.11 is triple-licensed (Apache-2.0 OR GPL-2.0-or-later OR
+            GPL-2.0-with-classpath-exception). This project uses it under the
+            Apache-2.0 terms, which is compatible with the project license.
+        -->
         <dependency>
             <groupId>org.bytedeco</groupId>
             <artifactId>javacpp</artifactId>
             <version>${javacpp.version}</version>
         </dependency>
 
-        <!-- JUnit 5 for testing -->
+        <!--
+            JUnit 5 for testing. junit-jupiter is the aggregator artifact
+            (api + engine + params); it is test-scope only and not distributed.
+        -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>

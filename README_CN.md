@@ -195,10 +195,10 @@ IndexParams invert = IndexParams.createInvert(true, false); // 倒排,用于文�
 
 ## 依赖
 
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| `org.bytedeco:javacpp` | 1.5.11 | JNI 代码生成 + 跨平台原生库加载 |
-| `org.junit.jupiter:junit-jupiter` | 5.10.2 | 单元测试(仅 test scope)|
+| 依赖 | 版本 | 用途 | 许可证 |
+|------|------|------|--------|
+| `org.bytedeco:javacpp` | 1.5.11 | JNI 代码生成 + 跨平台原生库加载 | Apache-2.0 **或** GPL-2.0-or-later **或** GPL-2.0-with-classpath-exception；本项目按 Apache-2.0 使用 |
+| `org.junit.jupiter:junit-jupiter` | 5.10.2 | 单元测试(仅 test scope)| EPL-2.0 |
 
 ## 架构
 
@@ -256,4 +256,14 @@ Zvec C API 未提供文档级校验函数(`zvec_doc_validate` 不存在),该方�
 
 ## 许可证
 
-与 Zvec 主项目保持一致,详见 [zvec/LICENSE](zvec/LICENSE)。
+本项目采用 **Apache License 2.0**,与 Zvec 主项目保持一致,详见 [zvec/LICENSE](zvec/LICENSE)。
+
+### 第三方许可证说明
+
+- **JavaCPP** (`org.bytedeco:javacpp:1.5.11`) 采用三重许可证:
+  `Apache-2.0 或 GPL-2.0-or-later 或 GPL-2.0-with-classpath-exception`。
+  本项目按 **Apache-2.0** 条款使用 JavaCPP。
+- **JUnit 5** 仅在 `test` scope 中使用,许可证为 EPL-2.0,不会被打入发布的 JAR。
+- 原生库 `zvec_c_api`(由 `zvec` 子模块构建)可能包含 **RocksDB** 等第三方代码。
+  RocksDB 的部分组件(例如源自 PerconaFT 的 `utilities/transactions/lock/range/range_tree/`)
+  采用 GPL/AGPL 类许可证。二进制分发方应确认 `zvec` 核心的构建方式与自身期望的许可证条款兼容。
