@@ -813,8 +813,8 @@ class ZvecTest {
             assertEquals("category", q.getGroupByFieldName());
             q.setGroupCount(5);
             assertEquals(5, q.getGroupCount());
-            q.setGroupTopK(3);
-            assertEquals(3, q.getGroupTopK());
+            q.setTopkPerGroup(3);
+            assertEquals(3, q.getTopkPerGroup());
         }
     }
 }

@@ -1,6 +1,9 @@
 package io.zvec.binding;
 
+import io.zvec.binding.ZvecNative.zvec_diskann_query_params_t;
 import io.zvec.binding.ZvecNative.zvec_flat_query_params_t;
+import io.zvec.binding.ZvecNative.zvec_fts_query_params_t;
+import io.zvec.binding.ZvecNative.zvec_fts_t;
 import io.zvec.binding.ZvecNative.zvec_hnsw_query_params_t;
 import io.zvec.binding.ZvecNative.zvec_ivf_query_params_t;
 import io.zvec.binding.ZvecNative.zvec_vector_query_t;
@@ -95,6 +98,37 @@ public class VectorQuery implements AutoCloseable {
     public void setFlatParams(Pointer flatParams) {
         ZvecException.throwIfError(
                 ZvecNative.zvec_vector_query_set_flat_params(handle, new zvec_flat_query_params_t(flatParams)));
+    }
+
+    public void setDiskAnnParams(DiskAnnQueryParams diskAnnParams) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_vector_query_set_diskann_params(handle, diskAnnParams.getHandle()));
+    }
+
+    public void setDiskAnnParams(Pointer diskAnnParams) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_vector_query_set_diskann_params(handle, new zvec_diskann_query_params_t(diskAnnParams)));
+    }
+
+    public void setFtsParams(FtsQueryParams ftsParams) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_vector_query_set_fts_params(handle, ftsParams.takeHandle()));
+    }
+
+    public void setFtsParams(Pointer ftsParams) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_vector_query_set_fts_params(handle, new zvec_fts_query_params_t(ftsParams)));
+    }
+
+    public void setFts(FtsPayload fts) {
+        ZvecException.throwIfError(ZvecNative.zvec_vector_query_set_fts(handle, fts.getHandle()));
+    }
+
+    public FtsPayload getFts() {
+        zvec_fts_t fts = ZvecNative.zvec_vector_query_get_fts(handle);
+        if (fts == null || fts.isNull()) return null;
+        // The returned payload is owned by the query; do not free it.
+        return new FtsPayload(fts, false);
     }
 
     @Override

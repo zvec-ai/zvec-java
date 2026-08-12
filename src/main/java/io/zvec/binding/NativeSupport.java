@@ -1,5 +1,6 @@
 package io.zvec.binding;
 
+import io.zvec.binding.ZvecNative.zvec_string_array_t;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.Pointer;
 import org.bytedeco.javacpp.PointerPointer;
@@ -64,5 +65,24 @@ final class NativeSupport {
             elems[i] = utf8(items[i]);
         }
         return new PointerPointer(elems);
+    }
+
+    /**
+     * Build a native {@code zvec_string_array_t} populated with NUL-terminated
+     * UTF-8 copies of {@code items}. Caller must destroy the returned array with
+     * {@link ZvecNative#zvec_string_array_destroy(zvec_string_array_t)}.
+     */
+    static zvec_string_array_t stringArray(String[] items) {
+        if (items == null) {
+            items = new String[0];
+        }
+        zvec_string_array_t array = ZvecNative.zvec_string_array_create(items.length);
+        if (array == null || array.isNull()) {
+            throw new ZvecException(ErrorCode.INTERNAL_ERROR, "failed to create string array");
+        }
+        for (int i = 0; i < items.length; i++) {
+            ZvecNative.zvec_string_array_add(array, i, items[i]);
+        }
+        return array;
     }
 }

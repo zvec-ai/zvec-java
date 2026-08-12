@@ -56,6 +56,25 @@ public final class Zvec {
     }
 
     // =========================================================================
+    // I/O backend introspection (DiskANN)
+    // =========================================================================
+
+    /** Returns the currently loaded DiskANN async I/O backend. */
+    public static IoBackendType getIoBackendType() {
+        return IoBackendType.fromCode(ZvecNative.zvec_get_io_backend_type());
+    }
+
+    /** Returns the human-readable name of the given I/O backend type. */
+    public static String getIoBackendTypeName(IoBackendType type) {
+        return NativeSupport.string(ZvecNative.zvec_get_io_backend_type_name(type.getCode()));
+    }
+
+    /** Returns a human-readable description of the current I/O backend. */
+    public static String getIoBackendDescription() {
+        return NativeSupport.string(ZvecNative.zvec_get_io_backend_description());
+    }
+
+    // =========================================================================
     // Lifecycle
     // =========================================================================
 

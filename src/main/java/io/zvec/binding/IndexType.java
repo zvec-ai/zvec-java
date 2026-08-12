@@ -8,7 +8,11 @@ public enum IndexType {
     HNSW(1),
     IVF(2),
     FLAT(3),
-    INVERT(10);
+    HNSW_RABITQ(4),
+    DISKANN(5),
+    VAMANA(6),
+    INVERT(10),
+    FTS(11);
 
     private final int code;
 

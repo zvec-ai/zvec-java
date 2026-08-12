@@ -1,5 +1,6 @@
 package io.zvec.binding;
 
+import io.zvec.binding.ZvecNative.zvec_diskann_query_params_t;
 import io.zvec.binding.ZvecNative.zvec_flat_query_params_t;
 import io.zvec.binding.ZvecNative.zvec_group_by_vector_query_t;
 import io.zvec.binding.ZvecNative.zvec_hnsw_query_params_t;
@@ -52,13 +53,13 @@ public class GroupByVectorQuery implements AutoCloseable {
         return ZvecNative.zvec_group_by_vector_query_get_group_count(handle);
     }
 
-    public void setGroupTopK(int topK) {
+    public void setTopkPerGroup(int topkPerGroup) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_group_by_vector_query_set_group_topk(handle, topK));
+                ZvecNative.zvec_group_by_vector_query_set_topk_per_group(handle, topkPerGroup));
     }
 
-    public int getGroupTopK() {
-        return ZvecNative.zvec_group_by_vector_query_get_group_topk(handle);
+    public int getTopkPerGroup() {
+        return ZvecNative.zvec_group_by_vector_query_get_topk_per_group(handle);
     }
 
     public void setQueryVector(float[] vector) {
@@ -106,6 +107,16 @@ public class GroupByVectorQuery implements AutoCloseable {
     public void setFlatParams(Pointer flatParams) {
         ZvecException.throwIfError(
                 ZvecNative.zvec_group_by_vector_query_set_flat_params(handle, new zvec_flat_query_params_t(flatParams)));
+    }
+
+    public void setDiskAnnParams(DiskAnnQueryParams diskAnnParams) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_group_by_vector_query_set_diskann_params(handle, diskAnnParams.getHandle()));
+    }
+
+    public void setDiskAnnParams(Pointer diskAnnParams) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_group_by_vector_query_set_diskann_params(handle, new zvec_diskann_query_params_t(diskAnnParams)));
     }
 
     @Override

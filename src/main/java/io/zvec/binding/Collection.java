@@ -211,6 +211,15 @@ public class Collection implements AutoCloseable {
         return readDocArray(results, count);
     }
 
+    /** Execute a multi-query (e.g., vector + FTS fusion).  Returns a list of owned Docs. */
+    public List<Doc> query(MultiQuery query) {
+        PointerPointer results = new PointerPointer(1);
+        SizeTPointer count = new SizeTPointer(1);
+        ZvecException.throwIfError(
+                ZvecNative.zvec_collection_multi_query(handle, query.getHandle(), results, count));
+        return readDocArray(results, count);
+    }
+
     /** Fetch documents by primary key.  Returns a list of owned Docs; caller must free them. */
     public List<Doc> fetch(List<String> pks) {
         if (pks == null || pks.isEmpty()) return new ArrayList<>();
