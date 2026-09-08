@@ -85,7 +85,7 @@
                         </goals>
                         <configuration>
                             <includes>
-                                <include>io/zvec/binding/presets/*.java</include>
+                                <include>org/zvec/binding/presets/*.java</include>
                             </includes>
                         </configuration>
                     </execution>
@@ -118,7 +118,7 @@
                         </goals>
                         <configuration>
                             <classOrPackageNames>
-                                <classOrPackageName>io.zvec.binding.presets.ZvecConfig</classOrPackageName>
+                                <classOrPackageName>org.zvec.binding.presets.ZvecConfig</classOrPackageName>
                             </classOrPackageNames>
                             <outputDirectory>${project.build.sourceDirectory}</outputDirectory>
                         </configuration>
@@ -132,7 +132,7 @@
                         </goals>
                         <configuration>
                             <classOrPackageNames>
-                                <classOrPackageName>io.zvec.binding.ZvecNative</classOrPackageName>
+                                <classOrPackageName>org.zvec.binding.ZvecNative</classOrPackageName>
                             </classOrPackageNames>
                         </configuration>
                     </execution>
@@ -171,7 +171,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>io.zvec.binding.examples.BasicExample</mainClass>
+                                    <mainClass>org.zvec.binding.examples.BasicExample</mainClass>
                                 </transformer>
                             </transformers>
                             <shadedArtifactAttached>true</shadedArtifactAttached>

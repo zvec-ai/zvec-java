@@ -4,7 +4,7 @@ dependency-reduced-pom.xml
 *.class
 
 # JavaCPP generated sources & native build artifacts
-src/main/java/io/zvec/binding/ZvecNative.java
+src/main/java/org/zvec/binding/ZvecNative.java
 *.o
 *.so
 *.dylib
