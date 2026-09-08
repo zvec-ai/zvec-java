@@ -13,10 +13,11 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * End-to-end integration tests for v0.6.0 features that require the native
- * zvec_c_api library: FTS-only collections and hybrid (vector + FTS) multi-query.
+ * End-to-end search integration tests that require the native zvec_c_api
+ * library: FTS-only collections, hybrid (vector + FTS) ranking, and multi-query
+ * fan-out over several sub-queries.
  */
-class V060IntegrationTest extends TestSupport {
+class SearchIntegrationTest extends TestSupport {
 
     // ------------------------------------------------------------------ FTS-only collection
 

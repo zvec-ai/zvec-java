@@ -15,7 +15,7 @@
 - **Jieba 全文索引开箱即用**:JAR 内置 cppjieba 词表(`jieba.dict.utf8` + `hmm_model.utf8`,位于 `zvec/jieba_dict/`),`Zvec.initialize()` 时自动注册,`jieba` 分词器无需任何额外配置
 - **多种数据类型**:支持 30 余种字段类型,包括各维度稀疏/稠密向量
 - **Java 8+**:最低兼容 Java 8
-- **123 个单元测试**:全部通过;关键 DML/DQL 采用强断言(topK 数量/score 排序/PK 命中、update 回读、delete 移除校验)。涉及平台受限索引的用例在 zvec 未编译该索引的平台上自动跳过
+- **120 个单元测试**:全部通过;关键 DML/DQL 采用强断言(topK 数量/score 排序/PK 命中、update 回读、delete 移除校验)。涉及平台受限索引的用例在 zvec 未编译该索引的平台上自动跳过
 
 ## 快速开始
 
@@ -110,7 +110,9 @@ zvec-java/
         ├── TestSupport.java                         # 测试基类(守护式 init + 索引集合/向量助手)
         ├── DocCoverageTest.java                     # Doc 元数据/UTF-8/异常 强断言
         ├── SchemaIndexConfigCoverageTest.java       # Schema/IndexParams(out 参数)/Config/异常
-        └── CollectionQueryCoverageTest.java         # DML/DQL 强断言(query/update/delete/filter)
+        ├── CollectionQueryCoverageTest.java         # DML/DQL 强断言(query/update/delete/filter)
+        ├── ExtendedApiCoverageTest.java             # 更广的 API 面:枚举码、DiskANN/IVF-RaBitQ/FTS 参数、multi-query、迭代器、I/O 后端、jieba 词表
+        └── SearchIntegrationTest.java               # 端到端检索:纯 FTS、向量 + FTS 混合、multi-query 多路子查询
 ```
 
 ## 代码示例

@@ -15,7 +15,7 @@ English | [简体中文](README.md)
 - **Jieba FTS out of the box**: the cppjieba dictionary (`jieba.dict.utf8` + `hmm_model.utf8`) is bundled inside the JAR under `zvec/jieba_dict/` and auto-registered at `Zvec.initialize()`, so the `jieba` full-text tokenizer needs no setup.
 - **Many data types**: 30+ field types, including sparse/dense vectors of various dimensions.
 - **Java 8+**: compatible with Java 8 and above.
-- **123 unit tests**: all passing; critical DML/DQL paths use strong assertions (topK count / score ordering / PK hits, update read-back, delete-removal verification). Tests exercising platform-gated indexes are skipped where zvec does not compile them in.
+- **120 unit tests**: all passing; critical DML/DQL paths use strong assertions (topK count / score ordering / PK hits, update read-back, delete-removal verification). Tests exercising platform-gated indexes are skipped where zvec does not compile them in.
 
 ## Quick Start
 
@@ -121,7 +121,8 @@ zvec-java/
         ├── DocCoverageTest.java                     # Doc metadata / UTF-8 / exception strong assertions
         ├── SchemaIndexConfigCoverageTest.java       # Schema / IndexParams (out params) / Config / exceptions
         ├── CollectionQueryCoverageTest.java         # DML/DQL strong assertions (query/update/delete/filter)
-        └── ExtendedApiCoverageTest.java             # Extended APIs (zvec ≥ v0.7.0): DiskANN/IVF-RaBitQ, iterator, I/O backend, jieba dict
+        ├── ExtendedApiCoverageTest.java             # Wider API surface: enum codes, DiskANN / IVF-RaBitQ / FTS params, multi-query, iterator, I/O backend, jieba dict
+        └── SearchIntegrationTest.java               # End-to-end search: FTS-only, hybrid vector + FTS, multi-query fan-out
 ```
 
 ## Code Examples

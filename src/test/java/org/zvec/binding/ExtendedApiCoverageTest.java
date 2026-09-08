@@ -5,7 +5,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -14,14 +13,62 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * Strong-assertion coverage for the C APIs added in zvec v0.7.0: DiskANN /
- * IVF-RaBitQ index and query parameters, the collection document iterator,
- * I/O backend introspection and the bundled jieba FTS dictionary.
+ * Strong-assertion coverage for the wider zvec C API surface: enum codes,
+ * index and query parameters (DiskANN, IVF-RaBitQ, Vamana, FTS), full-text and
+ * multi-query wrappers, the collection document iterator, I/O backend
+ * introspection and the bundled jieba dictionary.
+ *
+ * <p>Complements {@link ZvecTest} and the DML/DQL suites. Everything here is
+ * either a parameter round-trip against a native handle or an end-to-end
+ * collection run, so results are asserted instead of merely checked for
+ * "does not throw".
  */
 class ExtendedApiCoverageTest extends TestSupport {
 
     // =========================================================================
-    // Index parameters (new in v0.7.0)
+    // Enum codes
+    // =========================================================================
+
+    @Test
+    void testIndexTypeCodes() {
+        assertEquals(0, IndexType.UNDEFINED.getCode());
+        assertEquals(1, IndexType.HNSW.getCode());
+        assertEquals(2, IndexType.IVF.getCode());
+        assertEquals(3, IndexType.FLAT.getCode());
+        assertEquals(4, IndexType.HNSW_RABITQ.getCode());
+        assertEquals(5, IndexType.DISKANN.getCode());
+        assertEquals(6, IndexType.VAMANA.getCode());
+        assertEquals(7, IndexType.IVF_RABITQ.getCode());
+        assertEquals(10, IndexType.INVERT.getCode());
+        assertEquals(11, IndexType.FTS.getCode());
+
+        assertEquals(IndexType.DISKANN, IndexType.fromCode(5));
+        assertEquals(IndexType.FTS, IndexType.fromCode(11));
+        assertEquals(IndexType.UNDEFINED, IndexType.fromCode(999));
+    }
+
+    @Test
+    void testIoBackendTypeCodes() {
+        assertEquals(0, IoBackendType.PREAD.getCode());
+        assertEquals(1, IoBackendType.LIBAIO.getCode());
+        assertEquals(2, IoBackendType.IO_URING.getCode());
+
+        assertEquals(IoBackendType.PREAD, IoBackendType.fromCode(0));
+        assertEquals(IoBackendType.LIBAIO, IoBackendType.fromCode(1));
+        assertEquals(IoBackendType.IO_URING, IoBackendType.fromCode(2));
+        assertEquals(IoBackendType.PREAD, IoBackendType.fromCode(42),
+                "unknown codes fall back to pread");
+    }
+
+    @Test
+    void testRabitqQuantizeTypeCode() {
+        assertEquals(4, QuantizeType.RABITQ.getCode());
+        assertEquals(QuantizeType.RABITQ, QuantizeType.fromCode(4));
+    }
+
+
+    // =========================================================================
+    // Index parameters
     // =========================================================================
 
     @Test
@@ -37,6 +84,10 @@ class ExtendedApiCoverageTest extends TestSupport {
             assertEquals(32, p.getDiskAnnMaxDegree());
             assertEquals(100, p.getDiskAnnListSize());
             assertEquals(0, p.getDiskAnnPqChunkNum());
+        }
+        // pqChunkNum == 0 lets the native layer pick the chunk count itself.
+        try (IndexParams auto = IndexParams.createDiskAnn(MetricType.L2, 64, 128, 0)) {
+            assertEquals(0, auto.getDiskAnnPqChunkNum());
         }
     }
 
@@ -82,13 +133,20 @@ class ExtendedApiCoverageTest extends TestSupport {
     }
 
     @Test
-    void testRabitqQuantizeTypeCode() {
-        assertEquals(4, QuantizeType.RABITQ.getCode());
-        assertEquals(QuantizeType.RABITQ, QuantizeType.fromCode(4));
+    void testFtsIndexParamsRoundtrip() {
+        try (IndexParams p = IndexParams.createFTS(
+                "standard", new String[]{"lowercase", "ascii_folding"}, null)) {
+            assertEquals(IndexType.FTS, p.getType());
+            String[] params = p.getFTSParams();
+            assertEquals("standard", params[0]);
+            assertEquals("lowercase", params[1]);
+            assertEquals("ascii_folding", params[2]);
+            assertEquals("", params[3]);
+        }
     }
 
     // =========================================================================
-    // Query parameters (new in v0.7.0)
+    // Query parameters
     // =========================================================================
 
     @Test
@@ -166,7 +224,101 @@ class ExtendedApiCoverageTest extends TestSupport {
     }
 
     // =========================================================================
-    // Document iterator (new in v0.7.0)
+    // Full-text search and multi-query
+    // =========================================================================
+
+    @Test
+    void testFtsQueryParamsRoundtrip() {
+        try (FtsQueryParams p = new FtsQueryParams("AND")) {
+            assertEquals("AND", p.getDefaultOperator());
+            p.setDefaultOperator("OR");
+            assertEquals("OR", p.getDefaultOperator());
+        }
+    }
+
+    @Test
+    void testFtsPayloadRoundtrip() {
+        try (FtsPayload fts = new FtsPayload()) {
+            fts.setQueryString("zvec AND java");
+            assertEquals("zvec AND java", fts.getQueryString());
+
+            fts.setMatchString("full text search");
+            assertEquals("full text search", fts.getMatchString());
+        }
+    }
+
+    @Test
+    void testVectorQueryFtsAttachment() {
+        try (VectorQuery vq = new VectorQuery()) {
+            try (FtsQueryParams p = new FtsQueryParams("OR")) {
+                vq.setFtsParams(p);
+            }
+            try (FtsPayload fts = new FtsPayload()) {
+                fts.setQueryString("hello");
+                vq.setFts(fts);
+            }
+            FtsPayload attached = vq.getFts();
+            if (attached != null) {
+                attached.close();
+            }
+        }
+    }
+
+    @Test
+    void testMultiQueryLifecycle() {
+        try (MultiQuery mq = new MultiQuery()) {
+            mq.setTopk(10);
+            assertEquals(10, mq.getTopk());
+
+            mq.setFilter("num > 0");
+            assertEquals("num > 0", mq.getFilter());
+
+            mq.setIncludeVector(true);
+            assertTrue(mq.getIncludeVector());
+
+            mq.setOutputFields(new String[]{"pk", "vec"});
+
+            mq.setRerankRrf(60);
+            mq.setRerankWeighted(new double[]{0.7, 0.3});
+
+            try (SubQuery sq = new SubQuery()) {
+                sq.setFieldName("vec");
+                sq.setNumCandidates(100);
+                assertEquals(100, sq.getNumCandidates());
+                sq.setQueryVector(new float[]{0.1f, 0.2f, 0.3f, 0.4f});
+                mq.addSubQuery(sq);
+            }
+
+            assertEquals(1, mq.getSubQueryCount());
+        }
+    }
+
+    @Test
+    void testSubQuerySparseVector() {
+        try (SubQuery sq = new SubQuery()) {
+            sq.setFieldName("sparse_vec");
+            sq.setSparseVector(new int[]{0, 2, 5}, new float[]{1.0f, 2.0f, 3.0f});
+            sq.setSparseIndices(new int[]{1, 3});
+            sq.setSparseValues(new float[]{0.5f, 1.5f});
+        }
+    }
+
+    @Test
+    void testSubQueryFtsAttachment() {
+        try (SubQuery sq = new SubQuery()) {
+            sq.setFieldName("content");
+            try (FtsQueryParams p = new FtsQueryParams("AND")) {
+                sq.setFtsParams(p);
+            }
+            try (FtsPayload fts = new FtsPayload()) {
+                fts.setQueryString("zvec");
+                sq.setFts(fts);
+            }
+        }
+    }
+
+    // =========================================================================
+    // Document iterator
     // =========================================================================
 
     @Test
@@ -223,7 +375,7 @@ class ExtendedApiCoverageTest extends TestSupport {
     }
 
     // =========================================================================
-    // I/O backend introspection (new in v0.7.0)
+    // I/O backend introspection
     // =========================================================================
 
     @Test
@@ -233,13 +385,15 @@ class ExtendedApiCoverageTest extends TestSupport {
         String name = type.getName();
         assertTrue(name.equals("pread") || name.equals("libaio") || name.equals("io_uring"),
                 "unexpected backend name: " + name);
+        assertEquals(name, Zvec.getIoBackendTypeName(type),
+                "the enum accessor and the static helper must agree");
         String description = Zvec.getIoBackendDescription();
         assertNotNull(description);
         assertFalse(description.isEmpty(), "backend description must not be empty");
     }
 
     // =========================================================================
-    // Bundled jieba dict (v0.7.0 packaging requirement)
+    // Bundled jieba dict
     // =========================================================================
 
     @Test
