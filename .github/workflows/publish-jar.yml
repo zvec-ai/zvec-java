@@ -272,6 +272,14 @@ jobs:
               echo "::warning::No native library found for platform '$p' in the fat JAR"
             fi
           done
+          echo "=== Bundled jieba FTS dict inside $JAR ==="
+          jar tf "$JAR" | grep 'zvec/jieba_dict/' || true
+          for f in jieba.dict.utf8 hmm_model.utf8; do
+            if ! jar tf "$JAR" | grep -q "zvec/jieba_dict/$f"; then
+              echo "::error::jieba dict file zvec/jieba_dict/$f missing from the fat JAR"
+              exit 1
+            fi
+          done
 
       - name: Upload JAR artifacts
         uses: actions/upload-artifact@v4

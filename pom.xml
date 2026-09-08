@@ -34,6 +34,10 @@
         <zvec.home>${project.basedir}/zvec</zvec.home>
         <zvec.include.path>${zvec.home}/src/include</zvec.include.path>
         <zvec.lib.path>${zvec.home}/build/lib</zvec.lib.path>
+        <!-- cppjieba dictionary bundled with the JAR so the `jieba` FTS
+             tokenizer works out of the box (mirrors the zvec SDK layout,
+             which ships the same files under data/jieba_dict). -->
+        <zvec.jieba.dict.path>${zvec.home}/thirdparty/cppjieba/cppjieba-5.6.7/dict</zvec.jieba.dict.path>
 
         <!-- Auto-detected build platform (e.g. macosx-arm64, linux-x86_64, windows-x86_64) -->
         <javacpp.platform>${os.name}-${os.arch}</javacpp.platform>
@@ -65,6 +69,27 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- Default resource directory (kept explicit because overriding
+                 <resources> replaces the implicit default). -->
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- Bundle the cppjieba dictionary files from the zvec submodule
+                 into the JAR (zvec/jieba_dict/). At runtime Zvec.initialize()
+                 extracts them to a cache directory and registers the dir via
+                 zvec_set_default_jieba_dict_dir(). maven-resources-plugin
+                 silently skips this entry when the directory is absent (e.g.
+                 vendor-mode builds without the submodule). -->
+            <resource>
+                <directory>${zvec.jieba.dict.path}</directory>
+                <targetPath>zvec/jieba_dict</targetPath>
+                <includes>
+                    <include>jieba.dict.utf8</include>
+                    <include>hmm_model.utf8</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <!-- Step 1: pre-compile ONLY the JavaCPP preset config class so the
                  parser (step 2) can load it as an InfoMapper. -->

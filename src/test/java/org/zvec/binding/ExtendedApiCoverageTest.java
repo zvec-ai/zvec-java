@@ -240,6 +240,26 @@ class ExtendedApiCoverageTest extends TestSupport {
     // =========================================================================
 
     @Test
+    void testBundledJiebaDict() {
+        // TestSupport.initLibrary() -> Zvec.initialize(null) auto-registers the
+        // bundled dict as the process-wide default.
+        assertTrue(Zvec.isJiebaDictAvailable(), "a jieba dict source must be configured");
+
+        String dir = Zvec.getDefaultJiebaDictDir();
+        assertNotNull(dir);
+        assertFalse(dir.isEmpty(), "the bundled dict should be auto-registered at initialize");
+
+        for (String f : new String[]{"jieba.dict.utf8", "hmm_model.utf8"}) {
+            File file = new File(dir, f);
+            assertTrue(file.isFile(), "missing dict file " + file);
+            assertTrue(file.length() > 0, "empty dict file " + file);
+        }
+
+        // useBundledJiebaDict() is idempotent and reports the same directory.
+        assertEquals(dir, Zvec.useBundledJiebaDict());
+    }
+
+    @Test
     void testConfigDataJiebaDictDir() {
         try (ConfigData cfg = new ConfigData()) {
             cfg.setJiebaDictDir("/tmp/some-dict-dir");

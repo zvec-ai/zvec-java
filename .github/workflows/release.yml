@@ -119,6 +119,13 @@ jobs:
           cp zvec/src/include/zvec/c_api.h staging/include/zvec/
           echo "✓ Copied c_api.h"
 
+          # Jieba dict: the jieba FTS tokenizer needs these files at runtime;
+          # ship them under data/jieba_dict, mirroring the zvec SDK layout.
+          mkdir -p staging/data/jieba_dict
+          cp zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/jieba.dict.utf8 staging/data/jieba_dict/
+          cp zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/hmm_model.utf8 staging/data/jieba_dict/
+          echo "✓ Copied jieba dict"
+
           ls -la staging/$PLATFORM/
           du -h staging/$PLATFORM/${{ matrix.lib_name }}
         shell: bash
@@ -166,6 +173,12 @@ jobs:
           # Public header
           Copy-Item "zvec/src/include/zvec/c_api.h" "staging/include/zvec/"
           Write-Host "✓ Copied c_api.h"
+
+          # Jieba dict (mirrors the zvec SDK layout data/jieba_dict)
+          New-Item -ItemType Directory -Force -Path "staging/data/jieba_dict" | Out-Null
+          Copy-Item "zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/jieba.dict.utf8" "staging/data/jieba_dict/"
+          Copy-Item "zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/hmm_model.utf8" "staging/data/jieba_dict/"
+          Write-Host "✓ Copied jieba dict"
 
           Get-ChildItem "staging/$platform/"
         shell: pwsh
