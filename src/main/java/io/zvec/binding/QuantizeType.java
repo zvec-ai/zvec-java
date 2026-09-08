@@ -7,7 +7,8 @@ public enum QuantizeType {
     UNDEFINED(0),
     FP16(1),
     INT8(2),
-    INT4(3);
+    INT4(3),
+    RABITQ(4);
 
     private final int code;
 

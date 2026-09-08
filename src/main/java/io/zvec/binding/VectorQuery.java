@@ -100,9 +100,22 @@ public class VectorQuery implements AutoCloseable {
                 ZvecNative.zvec_vector_query_set_flat_params(handle, new zvec_flat_query_params_t(flatParams)));
     }
 
-    public void setDiskAnnParams(DiskAnnQueryParams diskAnnParams) {
+    /**
+     * Set IVF RaBitQ query parameters (zvec &ge; v0.7.0). Ownership of the
+     * params transfers to this query; the wrapper becomes inert.
+     */
+    public void setIvfRabitqParams(IvfRabitqQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_vector_query_set_diskann_params(handle, diskAnnParams.getHandle()));
+                ZvecNative.zvec_vector_query_set_ivf_rabitq_params(handle, params.takeHandle()));
+    }
+
+    /**
+     * Set DiskANN query parameters (zvec &ge; v0.7.0). Ownership of the
+     * params transfers to this query; the wrapper becomes inert.
+     */
+    public void setDiskAnnParams(DiskAnnQueryParams params) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_vector_query_set_diskann_params(handle, params.takeHandle()));
     }
 
     public void setDiskAnnParams(Pointer diskAnnParams) {

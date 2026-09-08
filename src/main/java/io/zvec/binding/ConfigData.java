@@ -38,6 +38,24 @@ public class ConfigData implements AutoCloseable {
     }
 
     /**
+     * Set the jieba dictionary directory used by the {@code jieba} FTS
+     * tokenizer (directory containing {@code jieba.dict.utf8} and
+     * {@code hmm_model.utf8}). Applied at {@link Zvec#initialize} time as
+     * the process-wide default. Resolution priority at tokenization time:
+     * per-field {@code extra_params.jieba_dict_dir} &gt; the
+     * {@code ZVEC_JIEBA_DICT_DIR} environment variable &gt; this default.
+     */
+    public void setJiebaDictDir(String dir) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_config_data_set_jieba_dict_dir(handle, NativeSupport.utf8(dir)));
+    }
+
+    /** Get the jieba dictionary directory; empty string when not set. */
+    public String getJiebaDictDir() {
+        return NativeSupport.string(ZvecNative.zvec_config_data_get_jieba_dict_dir(handle));
+    }
+
+    /**
      * Set log configuration.  Ownership is transferred to this ConfigData;
      * do not destroy the LogConfig separately afterward.
      */

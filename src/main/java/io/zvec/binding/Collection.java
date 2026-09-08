@@ -4,6 +4,7 @@ import io.zvec.binding.ZvecNative.zvec_collection_options_t;
 import io.zvec.binding.ZvecNative.zvec_collection_schema_t;
 import io.zvec.binding.ZvecNative.zvec_collection_stats_t;
 import io.zvec.binding.ZvecNative.zvec_collection_t;
+import io.zvec.binding.ZvecNative.zvec_doc_iterator_t;
 import io.zvec.binding.ZvecNative.zvec_doc_t;
 import io.zvec.binding.ZvecNative.zvec_field_schema_t;
 import org.bytedeco.javacpp.Pointer;
@@ -231,6 +232,28 @@ public class Collection implements AutoCloseable {
                 ZvecNative.zvec_collection_fetch(handle, pkPtr, pkArray.length,
                         null, 0, true, docs, foundCount));
         return readDocArray(docs, foundCount);
+    }
+
+    // =========================================================================
+    // Iteration (zvec >= v0.7.0)
+    // =========================================================================
+
+    /**
+     * Create a snapshot document iterator over this collection.
+     *
+     * <p>The iterator sees an isolated snapshot taken at call time. While any
+     * iterator is open, schema changes (create/drop index, add/alter/drop
+     * column) and {@link #destroy()} return an error; close every iterator
+     * before releasing the last collection handle.
+     *
+     * @param options iterator options, or {@code null} for defaults (all
+     *                fields, vectors included)
+     */
+    public DocIterator createIterator(IteratorOptions options) {
+        PointerPointer iterRef = new PointerPointer(1);
+        ZvecException.throwIfError(ZvecNative.zvec_collection_create_iterator(
+                handle, (options != null) ? options.getHandle() : null, iterRef));
+        return new DocIterator(new zvec_doc_iterator_t(iterRef.get(0)));
     }
 
     // =========================================================================

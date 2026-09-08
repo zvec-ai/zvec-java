@@ -53,11 +53,18 @@ public class GroupByVectorQuery implements AutoCloseable {
         return ZvecNative.zvec_group_by_vector_query_get_group_count(handle);
     }
 
+    /**
+     * Set the maximum number of results per group.
+     *
+     * <p>Named after {@code zvec_group_by_vector_query_set_topk_per_group}
+     * (renamed from {@code set_group_topk} in zvec v0.7.0).
+     */
     public void setTopkPerGroup(int topkPerGroup) {
         ZvecException.throwIfError(
                 ZvecNative.zvec_group_by_vector_query_set_topk_per_group(handle, topkPerGroup));
     }
 
+    /** Get the maximum number of results per group. */
     public int getTopkPerGroup() {
         return ZvecNative.zvec_group_by_vector_query_get_topk_per_group(handle);
     }
@@ -109,9 +116,22 @@ public class GroupByVectorQuery implements AutoCloseable {
                 ZvecNative.zvec_group_by_vector_query_set_flat_params(handle, new zvec_flat_query_params_t(flatParams)));
     }
 
-    public void setDiskAnnParams(DiskAnnQueryParams diskAnnParams) {
+    /**
+     * Set IVF RaBitQ query parameters (zvec &ge; v0.7.0). Ownership of the
+     * params transfers to this query; the wrapper becomes inert.
+     */
+    public void setIvfRabitqParams(IvfRabitqQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_group_by_vector_query_set_diskann_params(handle, diskAnnParams.getHandle()));
+                ZvecNative.zvec_group_by_vector_query_set_ivf_rabitq_params(handle, params.takeHandle()));
+    }
+
+    /**
+     * Set DiskANN query parameters (zvec &ge; v0.7.0). Ownership of the
+     * params transfers to this query; the wrapper becomes inert.
+     */
+    public void setDiskAnnParams(DiskAnnQueryParams params) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_group_by_vector_query_set_diskann_params(handle, params.takeHandle()));
     }
 
     public void setDiskAnnParams(Pointer diskAnnParams) {

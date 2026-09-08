@@ -4,6 +4,7 @@ import io.zvec.binding.ZvecNative.zvec_index_params_t;
 import io.zvec.binding.ZvecNative.zvec_string_array_t;
 import org.bytedeco.javacpp.BoolPointer;
 import org.bytedeco.javacpp.BytePointer;
+import org.bytedeco.javacpp.FloatPointer;
 import org.bytedeco.javacpp.IntPointer;
 import org.bytedeco.javacpp.PointerPointer;
 
@@ -16,8 +17,11 @@ import org.bytedeco.javacpp.PointerPointer;
  *   <li>{@link #createHNSWQuantized(MetricType, int, int, QuantizeType)}</li>
  *   <li>{@link #createIVF(MetricType, int, int, boolean)}</li>
  *   <li>{@link #createFlat(MetricType)}</li>
+ *   <li>{@link #createDiskAnn(MetricType, int, int, int)}</li>
+ *   <li>{@link #createDiskAnnQuantized(MetricType, int, int, int, QuantizeType)}</li>
+ *   <li>{@link #createIvfRabitq(MetricType, int, int, int)}</li>
+ *   <li>{@link #createVamana(MetricType, int, int, float, boolean, boolean)}</li>
  *   <li>{@link #createInvert(boolean, boolean)}</li>
- *   <li>{@link #createDiskANN(MetricType, int, int, int)}</li>
  *   <li>{@link #createFTS(String, String[], String)}</li>
  * </ul>
  */
@@ -76,24 +80,85 @@ public class IndexParams implements AutoCloseable {
         return p;
     }
 
+    /**
+     * Create DiskANN index parameters.
+     *
+     * @param metricType  distance metric
+     * @param maxDegree   graph connectivity (max degree of the Vamana graph)
+     * @param listSize    build-time list size (candidate list during construction)
+     * @param pqChunkNum  PQ chunk count (0 disables PQ)
+     */
+    public static IndexParams createDiskAnn(MetricType metricType, int maxDegree,
+                                            int listSize, int pqChunkNum) {
+        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.DISKANN.getCode());
+        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createDiskAnn");
+        IndexParams p = new IndexParams(ptr);
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_diskann_params(ptr, maxDegree, listSize, pqChunkNum));
+        return p;
+    }
+
+    public static IndexParams createDiskAnnQuantized(MetricType metricType, int maxDegree,
+                                                     int listSize, int pqChunkNum,
+                                                     QuantizeType quantizeType) {
+        IndexParams p = createDiskAnn(metricType, maxDegree, listSize, pqChunkNum);
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_quantize_type(p.handle, quantizeType.getCode()));
+        return p;
+    }
+
+    /**
+     * Create IVF RaBitQ index parameters.
+     *
+     * @param metricType   distance metric
+     * @param nlist        number of cluster centers
+     * @param totalBits    total bits for RaBitQ quantization
+     * @param sampleCount  sample count for training; 0 means use all vectors
+     */
+    public static IndexParams createIvfRabitq(MetricType metricType, int nlist,
+                                              int totalBits, int sampleCount) {
+        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.IVF_RABITQ.getCode());
+        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createIvfRabitq");
+        IndexParams p = new IndexParams(ptr);
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_ivf_rabitq_params(ptr, nlist, totalBits, sampleCount));
+        return p;
+    }
+
+    /**
+     * Create Vamana index parameters.
+     *
+     * @param metricType           distance metric
+     * @param maxDegree            maximum out-degree
+     * @param searchListSize       construction candidate list size
+     * @param alpha                RobustPrune alpha factor (e.g. 1.2)
+     * @param saturateGraph        force every node to reach max_degree
+     * @param useContiguousMemory  allocate a contiguous memory arena
+     */
+    public static IndexParams createVamana(MetricType metricType, int maxDegree,
+                                           int searchListSize, float alpha,
+                                           boolean saturateGraph, boolean useContiguousMemory) {
+        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.VAMANA.getCode());
+        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createVamana");
+        IndexParams p = new IndexParams(ptr);
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_vamana_params(
+                        ptr, maxDegree, searchListSize, alpha, saturateGraph, useContiguousMemory));
+        return p;
+    }
+
     public static IndexParams createInvert(boolean enableRangeOpt, boolean enableWildcard) {
         zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.INVERT.getCode());
         if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createInvert");
         IndexParams p = new IndexParams(ptr);
         ZvecException.throwIfError(
                 ZvecNative.zvec_index_params_set_invert_params(ptr, enableRangeOpt, enableWildcard));
-        return p;
-    }
-
-    public static IndexParams createDiskANN(MetricType metricType, int maxDegree,
-                                            int listSize, int pqChunkNum) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.DISKANN.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createDiskANN");
-        IndexParams p = new IndexParams(ptr);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_diskann_params(ptr, maxDegree, listSize, pqChunkNum));
         return p;
     }
 
@@ -186,6 +251,70 @@ public class IndexParams implements AutoCloseable {
         return new int[]{nList.get(), nIters.get(), useSoar.get() ? 1 : 0};
     }
 
+    public void setDiskAnnParams(int maxDegree, int listSize, int pqChunkNum) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_diskann_params(handle, maxDegree, listSize, pqChunkNum));
+    }
+
+    public int getDiskAnnMaxDegree() {
+        return ZvecNative.zvec_index_params_get_diskann_max_degree(handle);
+    }
+
+    public int getDiskAnnListSize() {
+        return ZvecNative.zvec_index_params_get_diskann_list_size(handle);
+    }
+
+    public int getDiskAnnPqChunkNum() {
+        return ZvecNative.zvec_index_params_get_diskann_pq_chunk_num(handle);
+    }
+
+    public void setIvfRabitqParams(int nlist, int totalBits, int sampleCount) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_ivf_rabitq_params(handle, nlist, totalBits, sampleCount));
+    }
+
+    /** Returns IVF RaBitQ params as an array: [nlist, totalBits, sampleCount]. */
+    public int[] getIvfRabitqParams() {
+        IntPointer nlist = new IntPointer(1);
+        IntPointer totalBits = new IntPointer(1);
+        IntPointer sampleCount = new IntPointer(1);
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_get_ivf_rabitq_params(handle, nlist, totalBits, sampleCount));
+        return new int[]{nlist.get(), totalBits.get(), sampleCount.get()};
+    }
+
+    public void setVamanaParams(int maxDegree, int searchListSize, float alpha,
+                                boolean saturateGraph, boolean useContiguousMemory) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_vamana_params(
+                        handle, maxDegree, searchListSize, alpha, saturateGraph, useContiguousMemory));
+    }
+
+    /** Returns Vamana params: [maxDegree, searchListSize, alpha, saturateGraph, useContiguousMemory]. */
+    public Object[] getVamanaParams() {
+        IntPointer maxDegree = new IntPointer(1);
+        IntPointer searchListSize = new IntPointer(1);
+        FloatPointer alpha = new FloatPointer(1);
+        BoolPointer saturateGraph = new BoolPointer(1);
+        BoolPointer useContiguousMemory = new BoolPointer(1);
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_get_vamana_params(
+                        handle, maxDegree, searchListSize, alpha, saturateGraph, useContiguousMemory));
+        return new Object[]{maxDegree.get(), searchListSize.get(), alpha.get(),
+                saturateGraph.get(), useContiguousMemory.get()};
+    }
+
+    /** Enable or disable Vamana two-pass graph construction (VAMANA params only). */
+    public void setVamanaTwoPassBuild(boolean twoPassBuild) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_index_params_set_vamana_two_pass_build(handle, twoPassBuild));
+    }
+
+    /** Whether Vamana two-pass graph construction is enabled. */
+    public boolean getVamanaTwoPassBuild() {
+        return ZvecNative.zvec_index_params_get_vamana_two_pass_build(handle);
+    }
+
     /** Returns Invert params as an array: [enableRangeOpt, enableWildcard]. */
     public boolean[] getInvertParams() {
         BoolPointer enableRangeOpt = new BoolPointer(1);
@@ -198,23 +327,6 @@ public class IndexParams implements AutoCloseable {
     public void setInvertParams(boolean enableRangeOpt, boolean enableWildcard) {
         ZvecException.throwIfError(
                 ZvecNative.zvec_index_params_set_invert_params(handle, enableRangeOpt, enableWildcard));
-    }
-
-    public void setDiskANNParams(int maxDegree, int listSize, int pqChunkNum) {
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_diskann_params(handle, maxDegree, listSize, pqChunkNum));
-    }
-
-    public int getDiskANNMaxDegree() {
-        return ZvecNative.zvec_index_params_get_diskann_max_degree(handle);
-    }
-
-    public int getDiskANNListSize() {
-        return ZvecNative.zvec_index_params_get_diskann_list_size(handle);
-    }
-
-    public int getDiskANNPqChunkNum() {
-        return ZvecNative.zvec_index_params_get_diskann_pq_chunk_num(handle);
     }
 
     /** Returns FTS params as an array: [tokenizerName, filters..., extraParams]. */

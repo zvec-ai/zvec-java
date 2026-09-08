@@ -11,6 +11,7 @@ public enum IndexType {
     HNSW_RABITQ(4),
     DISKANN(5),
     VAMANA(6),
+    IVF_RABITQ(7),
     INVERT(10),
     FTS(11);
 

@@ -72,17 +72,17 @@ class V060ApiCoverageTest {
 
     @Test
     void testDiskAnnIndexParamsRoundtrip() {
-        try (IndexParams p = IndexParams.createDiskANN(MetricType.L2, 64, 128, 0)) {
+        try (IndexParams p = IndexParams.createDiskAnn(MetricType.L2, 64, 128, 0)) {
             assertEquals(IndexType.DISKANN, p.getType());
             assertEquals(MetricType.L2, p.getMetricType());
-            assertEquals(64, p.getDiskANNMaxDegree());
-            assertEquals(128, p.getDiskANNListSize());
-            assertEquals(0, p.getDiskANNPqChunkNum());
+            assertEquals(64, p.getDiskAnnMaxDegree());
+            assertEquals(128, p.getDiskAnnListSize());
+            assertEquals(0, p.getDiskAnnPqChunkNum());
 
-            p.setDiskANNParams(32, 256, 4);
-            assertEquals(32, p.getDiskANNMaxDegree());
-            assertEquals(256, p.getDiskANNListSize());
-            assertEquals(4, p.getDiskANNPqChunkNum());
+            p.setDiskAnnParams(32, 256, 4);
+            assertEquals(32, p.getDiskAnnMaxDegree());
+            assertEquals(256, p.getDiskAnnListSize());
+            assertEquals(4, p.getDiskAnnPqChunkNum());
         }
     }
 
@@ -98,11 +98,11 @@ class V060ApiCoverageTest {
             p.setRadius(0.5f);
             assertEquals(0.5f, p.getRadius(), 1e-6);
 
-            p.setLinear(true);
-            assertTrue(p.isLinear());
+            p.setIsLinear(true);
+            assertTrue(p.getIsLinear());
 
-            p.setUsingRefiner(true);
-            assertTrue(p.isUsingRefiner());
+            p.setIsUsingRefiner(true);
+            assertTrue(p.getIsUsingRefiner());
         }
     }
 
