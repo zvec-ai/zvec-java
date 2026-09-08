@@ -58,9 +58,13 @@ jobs:
         shell: bash
         run: echo "sha=$(git -C zvec rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache zvec build
+      # Restore-only. The matching save step lives right after the build steps
+      # and is gated on a marker file they write on success, so a good build
+      # tree is reused even when a later step (the Maven tests) fails, while a
+      # half-built tree is never cached.
+      - name: Restore zvec build cache
         id: cache-zvec
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: zvec/build
           key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
@@ -101,6 +105,7 @@ jobs:
             -DBUILD_C_BINDINGS=ON \
             -G Ninja
           cmake --build . -j$NPROC --target zvec_c_api
+          touch .zvec-build-ok
         shell: bash
 
       - name: Build C-API library (Windows)
@@ -111,7 +116,25 @@ jobs:
           cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
           cmake --build . --target zvec_c_api -j $env:NUMBER_OF_PROCESSORS
+          New-Item -ItemType File -Force -Path .zvec-build-ok | Out-Null
         shell: pwsh
+
+      # Cache the build tree as soon as it is known good, so a later failure
+      # does not cost another full C++ build on the next run. The marker file
+      # written above is the gate: without it the build failed (or was skipped
+      # on a cache hit), and storing an incomplete tree would poison every
+      # subsequent run that resolves this exact key — there are no
+      # restore-keys, so a bad entry cannot self-heal.
+      # continue-on-error absorbs the 409 that actions/cache/save raises when a
+      # concurrent run already stored this key — the cache is an optimization,
+      # never a reason to fail the build.
+      - name: Save zvec build cache
+        if: always() && steps.cache-zvec.outputs.cache-hit != 'true' && hashFiles('zvec/build/.zvec-build-ok') != ''
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: zvec/build
+          key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
 
       - name: Verify C-API library (Unix)
         if: runner.os != 'Windows'

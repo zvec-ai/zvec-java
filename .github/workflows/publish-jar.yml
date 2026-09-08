@@ -81,9 +81,10 @@ jobs:
         shell: bash
         run: echo "sha=$(git -C zvec rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache zvec build
+      # Restore-only; see the gated save step after the build steps below.
+      - name: Restore zvec build cache
         id: cache-zvec
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: zvec/build
           key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
@@ -122,6 +123,7 @@ jobs:
           mkdir -p build && cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
           cmake --build . -j$NPROC --target zvec_c_api
+          touch .zvec-build-ok
 
       - name: Build C-API library (Windows)
         if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
@@ -132,6 +134,20 @@ jobs:
           cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
           cmake --build . --target zvec_c_api -j $env:NUMBER_OF_PROCESSORS
+          New-Item -ItemType File -Force -Path .zvec-build-ok | Out-Null
+
+      # Save as soon as the build is known good: the marker file is written only
+      # by a successful build, so a later failure (JNI glue, staging, upload)
+      # still leaves a reusable cache and an incomplete tree is never stored.
+      # continue-on-error absorbs the 409 raised when a concurrent run already
+      # stored this key.
+      - name: Save zvec build cache
+        if: always() && steps.cache-zvec.outputs.cache-hit != 'true' && hashFiles('zvec/build/.zvec-build-ok') != ''
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: zvec/build
+          key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
 
       # --- Locate the directory that holds the built library / import lib ---
       - name: Resolve zvec lib directory
@@ -213,9 +229,10 @@ jobs:
         shell: bash
         run: echo "sha=$(git -C zvec rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache zvec build
+      # Restore-only; see the gated save step after the build step below.
+      - name: Restore zvec build cache
         id: cache-zvec
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: zvec/build
           key: zvec-build-linux-x64-${{ steps.zvec.outputs.sha }}
@@ -242,6 +259,19 @@ jobs:
           mkdir -p build && cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
           cmake --build . -j$NPROC --target zvec_c_api
+          touch .zvec-build-ok
+
+      # Save as soon as the build is known good, so a later failure (fat JAR
+      # assembly, deploy) still leaves a reusable cache for the next run.
+      # continue-on-error absorbs the 409 raised when a concurrent run already
+      # stored this key.
+      - name: Save zvec build cache
+        if: always() && steps.cache-zvec.outputs.cache-hit != 'true' && hashFiles('zvec/build/.zvec-build-ok') != ''
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: zvec/build
+          key: zvec-build-linux-x64-${{ steps.zvec.outputs.sha }}
 
       - name: Download prebuilt native bundles
         uses: actions/download-artifact@v4
