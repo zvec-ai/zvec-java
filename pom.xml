@@ -5,13 +5,20 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.zvec</groupId>
+    <!-- NOTE: the groupId is the reversed zvec.org domain, required for the
+         Sonatype Central namespace verification (TXT record on zvec.org).
+         The Java package name org.zvec.binding is aligned with the groupId prefix. -->
+    <groupId>org.zvec</groupId>
     <artifactId>zvec-java</artifactId>
-    <version>1.0.0</version>
+    <!-- Version tracks the bundled zvec native version (here zvec v0.7.0),
+         matching the zvec release scheme. Binding-only fixes bump the third
+         segment (rocksdbjni precedent). -->
+    <version>0.7.0</version>
     <packaging>jar</packaging>
 
     <name>zvec-java</name>
     <description>Industrial-grade Java bindings for the Zvec in-process vector database C API (JavaCPP/JNI)</description>
+    <url>https://github.com/zvec-ai/zvec-java</url>
 
     <licenses>
         <license>
@@ -20,6 +27,20 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
+
+    <developers>
+        <developer>
+            <name>zvec-java maintainers</name>
+            <organization>zvec-ai</organization>
+            <organizationUrl>https://github.com/zvec-ai</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/zvec-ai/zvec-java.git</connection>
+        <developerConnection>scm:git:ssh://github.com:zvec-ai/zvec-java.git</developerConnection>
+        <url>https://github.com/zvec-ai/zvec-java</url>
+    </scm>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
@@ -41,6 +62,10 @@
 
         <!-- Auto-detected build platform (e.g. macosx-arm64, linux-x86_64, windows-x86_64) -->
         <javacpp.platform>${os.name}-${os.arch}</javacpp.platform>
+
+        <!-- Maven Central publishing (release profile): keep manual portal
+             review by default; CI may pass -Dcentral.autoPublish=true. -->
+        <central.autoPublish>false</central.autoPublish>
     </properties>
 
     <dependencies>
@@ -189,6 +214,7 @@
                 <version>3.5.2</version>
                 <executions>
                     <execution>
+                        <id>shade-fat-jar</id>
                         <phase>package</phase>
                         <goals>
                             <goal>shade</goal>
@@ -207,4 +233,178 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Maven Central publishing profile: GPG-signed deployment of the
+             all-platform main JAR plus sources and javadoc JARs (artifact
+             layout follows org.duckdb:duckdb_jdbc). Activate with:
+                 mvn deploy -Prelease [-,release-natives] -DskipTests
+             `release` publishes the main (all-platform) JAR plus sources and
+             javadoc; `release-natives` additionally builds and attaches the
+             single-platform classifier JARs and the nolib JAR (CI only, it
+             requires every platform's native library to be staged). -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <!-- The shaded with-dependencies JAR is a convenience for
+                         running the examples; do not ship it to Central. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-shade-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>shade-fat-jar</id>
+                                <phase>none</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.6.3</version>
+                        <configuration>
+                            <doclint>none</doclint>
+                            <quiet>true</quiet>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.4</version>
+                        <configuration>
+                            <!-- Non-interactive passphrase entry for CI. -->
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.8.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <!-- Credentials come from the <server id="central">
+                                 entry in settings.xml (CENTRAL_TOKEN_USER /
+                                 CENTRAL_TOKEN_PASSWORD in CI). -->
+                            <publishingServerId>central</publishingServerId>
+                            <!-- Keep manual review for now: the bundle stops in
+                                 the portal's Deployments page after validation
+                                 and is published by clicking "Publish". Flip to
+                                 true (or pass -Dcentral.autoPublish=true) once
+                                 the pipeline is proven. -->
+                            <autoPublish>${central.autoPublish}</autoPublish>
+                            <waitUntil>validated</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Extra classifier artifacts (same layout family as
+             org.duckdb:duckdb_jdbc): one JAR per platform (classes +
+             jieba dict + that platform's natives only) and a nolib JAR
+             (classes + dict, no natives). Requires every supported platform's
+             native bundle to be staged, which is only the case in the
+             publish-jar CI job; the script fails loudly otherwise. -->
+        <profile>
+            <id>release-natives</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.2.0</version>
+                        <executions>
+                            <execution>
+                                <id>package-platform-jars</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>bash</executable>
+                                    <arguments>
+                                        <argument>${project.basedir}/scripts/package-platform-jars.sh</argument>
+                                        <argument>${project.version}</argument>
+                                        <argument>--require-all</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-platform-jars</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>attach-artifact</goal>
+                                </goals>
+                                <configuration>
+                                    <artifacts>
+                                        <artifact>
+                                            <file>${project.build.directory}/zvec-java-${project.version}-macosx-arm64.jar</file>
+                                            <classifier>macosx-arm64</classifier>
+                                            <type>jar</type>
+                                        </artifact>
+                                        <artifact>
+                                            <file>${project.build.directory}/zvec-java-${project.version}-linux-x86_64.jar</file>
+                                            <classifier>linux-x86_64</classifier>
+                                            <type>jar</type>
+                                        </artifact>
+                                        <artifact>
+                                            <file>${project.build.directory}/zvec-java-${project.version}-windows-x86_64.jar</file>
+                                            <classifier>windows-x86_64</classifier>
+                                            <type>jar</type>
+                                        </artifact>
+                                        <artifact>
+                                            <file>${project.build.directory}/zvec-java-${project.version}-nolib.jar</file>
+                                            <classifier>nolib</classifier>
+                                            <type>jar</type>
+                                        </artifact>
+                                    </artifacts>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

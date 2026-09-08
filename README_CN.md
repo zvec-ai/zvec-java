@@ -10,10 +10,12 @@
 - **跨平台开箱即用**:原生库(`libzvec_c_api` + `libjniZvecNative`)按 `平台-架构` 目录打进 JAR,运行时零配置自动加载
 - **高层包装类**:在生成的 `ZvecNative` 之上提供类型安全、资源安全的 Java 对象
 - **AutoCloseable 资源管理**:所有持有原生资源的对象均实现 `AutoCloseable`,支持 try-with-resources
-- **丰富的索引支持**:HNSW、IVF、Flat、Invert(倒排)及量化变体
+- **丰富的索引支持**:HNSW、IVF、Flat、Invert(倒排)、Vamana、DiskANN、IVF-RaBitQ(zvec ≥ v0.7.0)及量化变体(FP16/INT8/INT4/RaBitQ)
+- **文档迭代器**:支持对集合做快照遍历,可选择输出字段(`Collection.createIterator`,zvec ≥ v0.7.0)
+- **Jieba 全文索引开箱即用**:JAR 内置 cppjieba 词表(`jieba.dict.utf8` + `hmm_model.utf8`,位于 `zvec/jieba_dict/`),`Zvec.initialize()` 时自动注册,`jieba` 分词器无需任何额外配置
 - **多种数据类型**:支持 30 余种字段类型,包括各维度稀疏/稠密向量
 - **Java 8+**:最低兼容 Java 8
-- **95 个单元测试**:全部通过;关键 DML/DQL 采用强断言(topK 数量/score 排序/PK 命中、update 回读、delete 移除校验)
+- **108 个单元测试**:全部通过;关键 DML/DQL 采用强断言(topK 数量/score 排序/PK 命中、update 回读、delete 移除校验)
 
 ## 快速开始
 
@@ -28,10 +30,10 @@
 
 ### 获取源码(含子模块)
 
-Zvec 核心以 **git submodule** 形式引入到 `./zvec`(对齐 DuckDB Java 的组织方式):
+Zvec 核心以 **git submodule** 形式引入到 `./zvec`:
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/zvec-ai/zvec-java.git
 cd zvec-java
 git submodule update --init --recursive
 ```
@@ -79,7 +81,7 @@ mvn test -Dzvec.home=/path/to/zvec
 
 ```bash
 mvn package -DskipTests
-java -jar target/zvec-java-1.0.0-with-dependencies.jar
+java -jar target/zvec-java-0.7.0-with-dependencies.jar
 ```
 
 ## 项目结构
@@ -89,7 +91,7 @@ zvec-java/
 ├── pom.xml                                          # Maven 构建(JavaCPP 插件两段式:parse + build)
 ├── zvec/                                            # git submodule:Zvec 核心
 └── src/
-    ├── main/java/io/zvec/binding/
+    ├── main/java/org/zvec/binding/
     │   ├── presets/ZvecConfig.java                  # JavaCPP InfoMapper:指导解析 c_api.h
     │   ├── ZvecNative.java                          # 【自动生成】低层 JNI 绑定(勿手改,已在 .gitignore)
     │   ├── NativeSupport.java                        # String <-> const char* 等桥接工具
@@ -103,7 +105,7 @@ zvec-java/
     │   ├── ConfigData.java / LogConfig.java
     │   ├── ZvecException.java
     │   └── DataType / IndexType / MetricType / QuantizeType / LogLevel / DocOperator / ErrorCode (枚举)
-    └── test/java/io/zvec/binding/
+    └── test/java/org/zvec/binding/
         ├── ZvecTest.java                            # 基础 API 测试
         ├── TestSupport.java                         # 测试基类(守护式 init + 索引集合/向量助手)
         ├── DocCoverageTest.java                     # Doc 元数据/UTF-8/异常 强断言

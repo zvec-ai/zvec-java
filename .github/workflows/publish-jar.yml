@@ -21,15 +21,25 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag / version (e.g., v1.0.0)'
+        description: 'Release tag / version (e.g., v0.7.0)'
         required: true
         type: string
+      deploy_central:
+        description: 'Also deploy the full artifact matrix (all-platform + per-platform + nolib JARs) to Maven Central'
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       tag:
-        description: 'Release tag / version (e.g., v1.0.0)'
+        description: 'Release tag / version (e.g., v0.7.0)'
         required: true
         type: string
+      deploy_central:
+        description: 'Also deploy the full artifact matrix (all-platform + per-platform + nolib JARs) to Maven Central'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -149,7 +159,13 @@ jobs:
         id: stage
         shell: bash
         run: |
-          PLATDIR=$(find target/classes -mindepth 1 -maxdepth 1 -type d -name '*-*' | head -n1)
+          # The javacpp compiler mojo emits the JNI glue + copied libs under
+          # the bound class' package path (org/zvec/binding/<platform>/).
+          PLATDIR=$(find target/classes/org/zvec/binding -mindepth 1 -maxdepth 1 -type d -name '*-*' | head -n1)
+          if [ -z "$PLATDIR" ]; then
+            # Fallback: root-level platform directory.
+            PLATDIR=$(find target/classes -mindepth 1 -maxdepth 1 -type d -name '*-*' | head -n1)
+          fi
           if [ -z "$PLATDIR" ]; then
             echo "::error::No JavaCPP platform directory found under target/classes"
             ls -la target/classes || true
@@ -236,14 +252,16 @@ jobs:
       - name: Stage foreign-platform native libraries into resources
         shell: bash
         run: |
-          mkdir -p src/main/resources
+          mkdir -p src/main/resources/org/zvec/binding
           # Stage every platform bundle EXCEPT linux (the linux glue is compiled
           # locally by the mvn build below). Each artifact holds a single
           # <javacpp-platform>/ directory (e.g. macosx-arm64, windows-x86_64).
+          # Natives land under the JavaCPP package path so the JAR layout is
+          # uniform across platforms (org/zvec/binding/<platform>/).
           find native-artifacts -mindepth 2 -maxdepth 2 -type d \
-            ! -name 'linux-*' -exec cp -r {} src/main/resources/ \;
+            ! -name 'linux-*' -exec cp -r {} src/main/resources/org/zvec/binding/ \;
           echo "=== Foreign platforms staged into resources ==="
-          ls -la src/main/resources/ || true
+          ls -la src/main/resources/org/zvec/binding/ || true
 
       - name: Set project version from tag
         shell: bash
@@ -287,3 +305,47 @@ jobs:
           name: zvec-java-jars
           path: |
             target/zvec-java-*.jar
+
+      # ------------------------------------------------------------------
+      # Maven Central deployment: all-platform main JAR + per-platform
+      # classifier JARs + nolib JAR (layout follows org.duckdb:duckdb_jdbc),
+      # opt-in via the deploy_central input. Requires repository secrets:
+      #   CENTRAL_TOKEN_USER / CENTRAL_TOKEN_PASSWORD  (portal user token)
+      #   GPG_SIGNING_KEY (base64 armored private key) / GPG_SIGNING_PASSPHRASE
+      # The deploy re-runs the build with the release profiles, attaching
+      # sources + javadoc JARs, per-platform classifier JARs, the nolib JAR
+      # and GPG signatures, then uploads one deployment bundle to the
+      # Sonatype Central Portal.
+      # ------------------------------------------------------------------
+      - name: Import GPG signing key
+        if: inputs.deploy_central
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+        run: echo "$GPG_SIGNING_KEY" | base64 -d | gpg --batch --import
+
+      - name: Write Central Portal settings.xml
+        if: inputs.deploy_central
+        run: |
+          cat > central-settings.xml <<'XML'
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+            <servers>
+              <server>
+                <id>central</id>
+                <username>${env.CENTRAL_TOKEN_USER}</username>
+                <password>${env.CENTRAL_TOKEN_PASSWORD}</password>
+              </server>
+            </servers>
+          </settings>
+          XML
+
+      - name: Deploy to Maven Central
+        if: inputs.deploy_central
+        env:
+          CENTRAL_TOKEN_USER: ${{ secrets.CENTRAL_TOKEN_USER }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          GPG_SIGNING_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
+        run: |
+          mvn -s central-settings.xml -B deploy -Prelease,release-natives \
+            -DskipTests \
+            -Dzvec.lib.path="$GITHUB_WORKSPACE/zvec/build/lib" \
+            -Dgpg.passphrase="$GPG_SIGNING_PASSPHRASE"

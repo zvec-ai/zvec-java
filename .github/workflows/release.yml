@@ -270,6 +270,8 @@ jobs:
     uses: ./.github/workflows/publish-jar.yml
     with:
       tag: ${{ inputs.tag || github.ref_name }}
+      deploy_central: true
+    secrets: inherit
 
   # ===========================================================================
   # Create GitHub Release with all platform libraries + JAR
@@ -332,7 +334,7 @@ jobs:
 
           \`\`\`xml
           <dependency>
-              <groupId>io.zvec</groupId>
+              <groupId>org.zvec</groupId>
               <artifactId>zvec-java</artifactId>
               <version>${VERSION}</version>
           </dependency>

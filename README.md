@@ -10,10 +10,12 @@ English | [简体中文](README.md)
 - **Cross-platform, zero-config**: native libraries (`libzvec_c_api` + `libjniZvecNative`) are packed into the JAR under `platform-arch` directories and loaded automatically at runtime with no configuration.
 - **High-level wrappers**: type-safe, resource-safe Java objects layered on top of the generated `ZvecNative`.
 - **AutoCloseable resource management**: every object holding native resources implements `AutoCloseable` for use with try-with-resources.
-- **Rich index support**: HNSW, IVF, Flat, Invert (inverted) and their quantized variants.
+- **Rich index support**: HNSW, IVF, Flat, Invert (inverted), Vamana, DiskANN and IVF-RaBitQ (zvec &ge; v0.7.0), plus quantized variants (FP16/INT8/INT4/RaBitQ).
+- **Document iteration**: snapshot iterators over collections with output-field selection (`Collection.createIterator`, zvec &ge; v0.7.0).
+- **Jieba FTS out of the box**: the cppjieba dictionary (`jieba.dict.utf8` + `hmm_model.utf8`) is bundled inside the JAR under `zvec/jieba_dict/` and auto-registered at `Zvec.initialize()`, so the `jieba` full-text tokenizer needs no setup.
 - **Many data types**: 30+ field types, including sparse/dense vectors of various dimensions.
 - **Java 8+**: compatible with Java 8 and above.
-- **95 unit tests**: all passing; critical DML/DQL paths use strong assertions (topK count / score ordering / PK hits, update read-back, delete-removal verification).
+- **108 unit tests**: all passing; critical DML/DQL paths use strong assertions (topK count / score ordering / PK hits, update read-back, delete-removal verification).
 
 ## Quick Start
 
@@ -28,10 +30,15 @@ English | [简体中文](README.md)
 
 ### Get the source (with submodules)
 
-The Zvec core is included as a **git submodule** at `./zvec` (mirroring DuckDB Java's layout):
+The Zvec core is included as a **git submodule** at `./zvec`:
+
+> **Version requirement**: the submodule is pinned to **zvec v0.7.0**. The
+> v0.7.0 C API adds DiskANN / IVF-RaBitQ index and query parameters, the
+> collection document iterator, and I/O backend introspection; the bindings
+> expose all of them.
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/zvec-ai/zvec-java.git
 cd zvec-java
 git submodule update --init --recursive
 ```
@@ -79,7 +86,7 @@ The packaged fat JAR **already embeds the native library for the current platfor
 
 ```bash
 mvn package -DskipTests
-java -jar target/zvec-java-1.0.0-with-dependencies.jar
+java -jar target/zvec-java-0.7.0-with-dependencies.jar
 ```
 
 ## Project Structure
@@ -89,7 +96,7 @@ zvec-java/
 ├── pom.xml                                          # Maven build (two-stage JavaCPP plugin: parse + build)
 ├── zvec/                                            # git submodule: Zvec core
 └── src/
-    ├── main/java/io/zvec/binding/
+    ├── main/java/org/zvec/binding/
     │   ├── presets/ZvecConfig.java                  # JavaCPP InfoMapper: guides parsing of c_api.h
     │   ├── ZvecNative.java                          # [generated] low-level JNI binding (do not edit; git-ignored)
     │   ├── NativeSupport.java                        # Bridging helpers: String <-> const char*, etc.
@@ -99,17 +106,22 @@ zvec-java/
     │   ├── CollectionOptions.java / CollectionSchema.java / CollectionStats.java
     │   ├── FieldSchema.java                         # Field schema definitions
     │   ├── Doc.java                                 # Document CRUD (read/write typed fields)
-    │   ├── IndexParams.java                         # Index params (HNSW/IVF/Flat/Invert)
+    │   ├── IndexParams.java                         # Index params (HNSW/IVF/Flat/Invert/Vamana/DiskANN/IVF-RaBitQ)
     │   ├── VectorQuery.java / GroupByVectorQuery.java
+    │   ├── DiskAnnQueryParams.java / IvfRabitqQueryParams.java   # v0.7.0 query params
+    │   ├── DocIterator.java / IteratorOptions.java  # v0.7.0 collection iterator
+    │   ├── IoBackendType.java                       # v0.7.0 I/O backend enum
+    │   ├── JiebaDictSupport.java                    # Extracts the bundled jieba FTS dict
     │   ├── ConfigData.java / LogConfig.java
     │   ├── ZvecException.java
     │   └── DataType / IndexType / MetricType / QuantizeType / LogLevel / DocOperator / ErrorCode (enums)
-    └── test/java/io/zvec/binding/
+    └── test/java/org/zvec/binding/
         ├── ZvecTest.java                            # Basic API tests
         ├── TestSupport.java                         # Test base (guarded init + indexed collection/vector helpers)
         ├── DocCoverageTest.java                     # Doc metadata / UTF-8 / exception strong assertions
         ├── SchemaIndexConfigCoverageTest.java       # Schema / IndexParams (out params) / Config / exceptions
-        └── CollectionQueryCoverageTest.java         # DML/DQL strong assertions (query/update/delete/filter)
+        ├── CollectionQueryCoverageTest.java         # DML/DQL strong assertions (query/update/delete/filter)
+        └── ExtendedApiCoverageTest.java             # Extended APIs (zvec ≥ v0.7.0): DiskANN/IVF-RaBitQ, iterator, I/O backend, jieba dict
 ```
 
 ## Code Examples
@@ -241,6 +253,18 @@ ZVEC_NATIVE_PATH=/path/to/zvec/build/lib java -jar app.jar
 ```
 
 A local `mvn package` produces a fat JAR containing only the native library for **the platform it was built on**; the CI **Publish JAR** workflow builds on each platform and aggregates a **multi-platform fat JAR bundling native libraries for all platforms** (see `.github/workflows/publish-jar.yml`).
+
+### How does the jieba FTS tokenizer find its dictionary?
+
+The JAR bundles the cppjieba dictionary files (`jieba.dict.utf8`, `hmm_model.utf8`) under `zvec/jieba_dict/`. During `Zvec.initialize()` they are extracted to a per-version cache directory (default `~/.zvec/jieba_dict/<zvec-version>`, falling back to `<tmpdir>/zvec-java/jieba_dict/<version>`) and registered via `zvec_set_default_jieba_dict_dir()` — so creating a `jieba` FTS index works with no extra setup.
+
+Resolution priority (highest first) at tokenization time:
+
+1. per-field `extra_params.jieba_dict_dir`
+2. the `ZVEC_JIEBA_DICT_DIR` environment variable
+3. the process-wide default (`ConfigData.setJiebaDictDir()` / `Zvec.setDefaultJiebaDictDir()` / the auto-extracted bundled dict)
+
+Override the extraction location with `-Dzvec.jieba.cache.dir=/dir` (or `ZVEC_JIEBA_CACHE_DIR`).
 
 ### `Collection.fetch()` returns empty / InvalidArgument
 
