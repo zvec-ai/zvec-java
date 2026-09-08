@@ -111,7 +111,7 @@ zvec-java/
         ├── DocCoverageTest.java                     # Doc 元数据/UTF-8/异常 强断言
         ├── SchemaIndexConfigCoverageTest.java       # Schema/IndexParams(out 参数)/Config/异常
         ├── CollectionQueryCoverageTest.java         # DML/DQL 强断言(query/update/delete/filter)
-        ├── ExtendedApiCoverageTest.java             # 更广的 API 面:枚举码、DiskANN/IVF-RaBitQ/FTS 参数、multi-query、迭代器、I/O 后端、jieba 词表
+        ├── ApiCoverageTest.java                     # 更广的 API 面:枚举码、DiskANN/IVF-RaBitQ/FTS 参数、multi-query、迭代器、I/O 后端、jieba 词表
         └── SearchIntegrationTest.java               # 端到端检索:纯 FTS、向量 + FTS 混合、multi-query 多路子查询
 ```
 

@@ -121,7 +121,7 @@ zvec-java/
         ├── DocCoverageTest.java                     # Doc metadata / UTF-8 / exception strong assertions
         ├── SchemaIndexConfigCoverageTest.java       # Schema / IndexParams (out params) / Config / exceptions
         ├── CollectionQueryCoverageTest.java         # DML/DQL strong assertions (query/update/delete/filter)
-        ├── ExtendedApiCoverageTest.java             # Wider API surface: enum codes, DiskANN / IVF-RaBitQ / FTS params, multi-query, iterator, I/O backend, jieba dict
+        ├── ApiCoverageTest.java                     # Wider API surface: enum codes, DiskANN / IVF-RaBitQ / FTS params, multi-query, iterator, I/O backend, jieba dict
         └── SearchIntegrationTest.java               # End-to-end search: FTS-only, hybrid vector + FTS, multi-query fan-out
 ```
 

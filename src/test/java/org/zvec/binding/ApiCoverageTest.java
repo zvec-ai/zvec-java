@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * collection run, so results are asserted instead of merely checked for
  * "does not throw".
  */
-class ExtendedApiCoverageTest extends TestSupport {
+class ApiCoverageTest extends TestSupport {
 
     // =========================================================================
     // Enum codes
