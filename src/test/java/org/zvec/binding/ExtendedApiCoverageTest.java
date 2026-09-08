@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Strong-assertion coverage for the C APIs added in zvec v0.7.0: DiskANN /
@@ -124,6 +125,8 @@ class ExtendedApiCoverageTest extends TestSupport {
 
     @Test
     void testDiskAnnEndToEndQuery(@TempDir Path dir) {
+        assumeTrue(isDiskAnnSupported(),
+                "zvec enables DiskANN only on Linux x86_64/aarch64 and macOS arm64");
         // Build a DiskANN-indexed collection and query it with DiskANN params.
         CollectionSchema schema = new CollectionSchema("diskann_e2e");
         try (FieldSchema vecF = new FieldSchema("vec", DataType.VECTOR_FP32, false, 4);

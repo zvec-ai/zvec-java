@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeAll;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 /**
@@ -95,5 +96,24 @@ abstract class TestSupport {
             throw new IllegalStateException("insert failed: " + r);
         }
         return pks;
+    }
+
+    /**
+     * Whether the current JVM runs on a platform where zvec compiles DiskANN in.
+     *
+     * <p>Mirrors {@code DISKANN_SUPPORTED} in the zvec top-level CMakeLists.txt:
+     * Linux x86_64/aarch64, or macOS arm64. Everywhere else (notably Windows)
+     * schema validation rejects a DiskANN index with {@code NotSupported}, so
+     * end-to-end DiskANN tests must be skipped rather than failed. Parameter
+     * round-trip tests are unaffected — they never reach the native validator.
+     */
+    static boolean isDiskAnnSupported() {
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
+        boolean isLinux = os.contains("linux");
+        boolean isMac = os.contains("mac") || os.contains("darwin");
+        boolean isX64 = arch.equals("amd64") || arch.equals("x86_64");
+        boolean isArm64 = arch.equals("aarch64") || arch.equals("arm64");
+        return (isLinux && (isX64 || isArm64)) || (isMac && isArm64);
     }
 }
