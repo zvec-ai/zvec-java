@@ -31,6 +31,7 @@
     <developers>
         <developer>
             <name>zvec-java maintainers</name>
+            <email>zvec@alibaba-inc.com</email>
             <organization>zvec-ai</organization>
             <organizationUrl>https://github.com/zvec-ai</organizationUrl>
         </developer>
