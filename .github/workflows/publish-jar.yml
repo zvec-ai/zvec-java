@@ -14,22 +14,14 @@ name: Publish JAR
 #      bundles from step 1 into src/main/resources/<platform>/ and packages ONE
 #      fat JAR containing the libraries for all platforms.
 #
-# The workflow is standalone (workflow_dispatch) and reusable (workflow_call by
-# the Release workflow). Its final artifact is "zvec-java-jars".
+# The workflow is manual-only (workflow_dispatch) by design: the Release
+# workflow publishes the pre-built C libraries first, a human verifies the
+# release, and only then is this run by hand with the same tag to build the
+# JAR family and (opt-in via deploy_central) deploy to Maven Central.
+# Its final artifact is "zvec-java-jars".
 
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag / version (e.g., v0.7.0)'
-        required: true
-        type: string
-      deploy_central:
-        description: 'Also deploy the full artifact matrix (all-platform + per-platform + nolib JARs) to Maven Central'
-        required: false
-        type: boolean
-        default: false
-  workflow_call:
     inputs:
       tag:
         description: 'Release tag / version (e.g., v0.7.0)'
@@ -317,7 +309,8 @@ jobs:
           jar tf "$JAR" | grep -E '(macosx|linux|windows).*\.(dylib|so|dll)$' | sort
           for p in macosx linux windows; do
             if ! jar tf "$JAR" | grep -qE "${p}.*\.(dylib|so|dll)$"; then
-              echo "::warning::No native library found for platform '$p' in the fat JAR"
+              echo "::error::No native library found for platform '$p' in the fat JAR"
+              exit 1
             fi
           done
           echo "=== Bundled jieba FTS dict inside $JAR ==="

@@ -56,15 +56,29 @@ jobs:
           java-version: '11'
           cache: maven
 
+      # --- Version-anchored cache (same key family as publish-jar.yml, so
+      #     both workflows share one cache): keyed by the zvec submodule commit ---
+      - name: Resolve zvec submodule commit
+        id: zvec
+        shell: bash
+        run: echo "sha=$(git -C zvec rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore zvec build cache
+        id: cache-zvec
+        uses: actions/cache/restore@v4
+        with:
+          path: zvec/build
+          key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
+
       # --- Unix build tools ---
       - name: Set up Python (for CMake / Ninja)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install build tools (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
         run: |
           python -m pip install --upgrade pip cmake==3.30.0 ninja==1.11.1
           echo "$(python -c 'import site; print(site.USER_BASE)')/bin" >> $GITHUB_PATH
@@ -76,13 +90,13 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install CMake and Ninja (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
         run: pip install cmake==3.30.0 ninja==1.11.1
         shell: pwsh
 
-      # --- Build C-API library ---
+      # --- Build C-API library (skipped on cache hit) ---
       - name: Build C-API library (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
         run: |
           NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
           cd zvec
@@ -92,17 +106,31 @@ jobs:
             -DBUILD_C_BINDINGS=ON \
             -G Ninja
           cmake --build . -j$NPROC --target zvec_c_api
+          touch .zvec-build-ok
         shell: bash
 
       - name: Build C-API library (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
         run: |
           cd zvec
           New-Item -ItemType Directory -Force -Path build | Out-Null
           cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
           cmake --build . --target zvec_c_api -j $env:NUMBER_OF_PROCESSORS
+          New-Item -ItemType File -Force -Path .zvec-build-ok | Out-Null
         shell: pwsh
+
+      # Save as soon as the build is known good; the marker file is written
+      # only by a successful build, so a later failure still leaves a reusable
+      # cache. continue-on-error absorbs the 409 raised when a concurrent run
+      # (e.g. a manual Publish JAR run sharing the same key) already stored it.
+      - name: Save zvec build cache
+        if: always() && steps.cache-zvec.outputs.cache-hit != 'true' && hashFiles('zvec/build/.zvec-build-ok') != ''
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: zvec/build
+          key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
 
       # --- Package libraries ---
       - name: Package libraries (Unix)
@@ -259,26 +287,18 @@ jobs:
             ${{ matrix.artifact_name }}.zip.sha256
 
   # ===========================================================================
-  # Build the Maven JAR — delegated to the standalone "Publish JAR" workflow
-  # (.github/workflows/publish-jar.yml) so it can also be triggered manually on
-  # its own. Artifacts it uploads (zvec-java-jars) are available to the release
-  # job within this same run.
+  # NOTE: the Maven JAR build & Central deployment intentionally live in the
+  # standalone "Publish JAR" workflow (.github/workflows/publish-jar.yml),
+  # which is manual-only. Once this release looks good, run it by hand with
+  # the same tag to build the JAR family and (opt-in) deploy to Maven Central.
   # ===========================================================================
-  build-jar:
-    name: Build JAR
-    needs: build-libs
-    uses: ./.github/workflows/publish-jar.yml
-    with:
-      tag: ${{ inputs.tag || github.ref_name }}
-      deploy_central: true
-    secrets: inherit
 
   # ===========================================================================
-  # Create GitHub Release with all platform libraries + JAR
+  # Create GitHub Release with all platform libraries
   # ===========================================================================
   release:
     name: Create Release
-    needs: [ build-libs, build-jar ]
+    needs: [ build-libs ]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -313,7 +333,7 @@ jobs:
           cat > release-notes.md << EOF
           ## zvec-java ${TAG}
 
-          Industrial-grade Java bindings for the [Zvec](https://github.com/zvec-ai/zvec) vector database C API.
+          Industrial-grade Java bindings for the [Zvec](https://github.com/alibaba/zvec) vector database C API.
 
           ### Pre-built C Libraries
 
@@ -327,8 +347,10 @@ jobs:
 
           ### Maven JAR
 
-          The \`zvec-java-${VERSION}.jar\` contains the Java binding (requires JNA at runtime).
-          The \`zvec-java-${VERSION}-with-dependencies.jar\` is a self-contained fat jar.
+          The JAR family (multi-platform fat JAR, per-platform classifier JARs, nolib JAR) is
+          published separately from this release: run the **Publish JAR** workflow manually with
+          the tag \`${TAG}\` once this release has been verified. Afterwards the artifacts are
+          available from Maven Central.
 
           ### Maven Dependency
 
@@ -363,10 +385,6 @@ jobs:
           # Platform libraries
           find ./artifacts -name "*.tar.gz" -o -name "*.tar.gz.sha256" \
                -o -name "*.zip"    -o -name "*.zip.sha256" | while read f; do
-            cp "$f" release-assets/
-          done
-          # JAR files
-          find ./artifacts/zvec-java-jars -name "*.jar" | while read f; do
             cp "$f" release-assets/
           done
           echo "=== Release assets ==="
