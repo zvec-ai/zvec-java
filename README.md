@@ -74,8 +74,11 @@ Single-platform classifiers:
 implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 ```
 
-Supported platforms: macOS ARM64, Linux x86_64, Windows x86_64. Per-index
-platform availability still follows zvec itself (see [Features](#features)).
+Supported platforms: macOS ARM64, Linux x86_64 and Windows x86_64. The Linux
+native libraries are built in the `manylinux_2_28` image and need glibc 2.27 or
+newer, so Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ and Fedora 28+ are all
+covered. Per-index platform availability still follows zvec itself (see
+[Features](#features)).
 
 From here, jump to [Code Examples](#code-examples) — `Zvec.initialize(null)` is
 the only setup call you need.
