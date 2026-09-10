@@ -1,6 +1,6 @@
 # zvec-java
 
-English | [简体中文](README.md)
+English | [简体中文](README_CN.md)
 
 **zvec-java** provides industrial-grade Java bindings for the [Zvec](https://github.com/alibaba/zvec) vector database C API, built on [JavaCPP](https://github.com/bytedeco/javacpp) for JNI binding generation. JavaCPP auto-generates the JNI glue from `zvec/c_api.h`, bundles the per-platform native libraries into the JAR, and extracts and loads them at runtime — **no hand-written JNI code, and no manual library-path configuration required**.
 
@@ -17,7 +17,76 @@ English | [简体中文](README.md)
 - **Java 8+**: compatible with Java 8 and above.
 - **120 unit tests**: all passing; critical DML/DQL paths use strong assertions (topK count / score ordering / PK hits, update read-back, delete-removal verification). Tests exercising platform-gated indexes are skipped where zvec does not compile them in.
 
+## Installation
+
+Released artifacts are published to **Maven Central** as `org.zvec:zvec-java`.
+Adding the dependency is the entire setup: the JAR already carries the native
+libraries and the cppjieba dictionary, so there is no separate native install
+step and no library-path configuration.
+
+**Maven**
+
+```xml
+<dependency>
+    <groupId>org.zvec</groupId>
+    <artifactId>zvec-java</artifactId>
+    <version>0.7.0</version>
+</dependency>
+```
+
+**Gradle**
+
+```groovy
+implementation 'org.zvec:zvec-java:0.7.0'
+```
+
+`org.bytedeco:javacpp` comes in transitively, so you do not need to declare it.
+Java 8 or newer is required.
+
+The public API lives in the `org.zvec.binding` package: `Zvec`, `Collection`,
+`Doc`, `Schema`, `IndexParams` and `VectorQuery` are all there rather than under
+`org.zvec`.
+
+### Picking an artifact
+
+The version tracks the bundled zvec native version: `0.7.0` ships zvec v0.7.0.
+
+| Artifact | Contents | Pick it when |
+|----------|----------|--------------|
+| *(no classifier)* | classes + jieba dict + natives for **all** supported platforms | You want one dependency that runs anywhere. Simplest choice, largest download. |
+| `macosx-arm64` | classes + jieba dict + macOS ARM64 natives | You deploy to a single known platform and want a smaller artifact. |
+| `linux-x86_64` | classes + jieba dict + Linux x86_64 natives | Same, for Linux x86_64. |
+| `windows-x86_64` | classes + jieba dict + Windows x86_64 natives | Same, for Windows x86_64. |
+| `nolib` | classes + jieba dict, **no** natives | You build or ship `zvec_c_api` yourself and point the loader at it (see [How are native libraries loaded?](#how-are-native-libraries-loaded)). |
+
+Single-platform classifiers:
+
+```xml
+<dependency>
+    <groupId>org.zvec</groupId>
+    <artifactId>zvec-java</artifactId>
+    <version>0.7.0</version>
+    <classifier>linux-x86_64</classifier>
+</dependency>
+```
+
+```groovy
+implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
+```
+
+Supported platforms: macOS ARM64, Linux x86_64, Windows x86_64. Per-index
+platform availability still follows zvec itself (see [Features](#features)).
+
+From here, jump to [Code Examples](#code-examples) — `Zvec.initialize(null)` is
+the only setup call you need.
+
 ## Quick Start
+
+Everything below builds the binding from source. That is what you want for
+development, or when you need a native library for a platform/architecture the
+released artifacts do not cover. If you only want to *use* zvec-java, the Maven
+Central dependency from [Installation](#installation) is enough and you can skip
+straight to [Code Examples](#code-examples).
 
 ### Prerequisites
 
@@ -253,7 +322,7 @@ java -Dzvec.native.path=/path/to/zvec/build/lib -jar app.jar
 ZVEC_NATIVE_PATH=/path/to/zvec/build/lib java -jar app.jar
 ```
 
-A local `mvn package` produces a fat JAR containing only the native library for **the platform it was built on**; the CI **Publish JAR** workflow builds on each platform and aggregates a **multi-platform fat JAR bundling native libraries for all platforms** (see `.github/workflows/publish-jar.yml`).
+A local `mvn package` produces a fat JAR containing only the native library for **the platform it was built on**; the CI **Publish JAR** workflow builds on each platform and aggregates a **multi-platform fat JAR bundling native libraries for all platforms** (see `.github/workflows/publish-jar.yml`). That multi-platform JAR is what gets published to Maven Central as `org.zvec:zvec-java`, alongside the single-platform classifier JARs and the `nolib` JAR described in [Installation](#installation).
 
 ### How does the jieba FTS tokenizer find its dictionary?
 

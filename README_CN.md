@@ -1,6 +1,6 @@
 # zvec-java
 
-[English](README_EN.md) | 简体中文
+[English](README.md) | 简体中文
 
 **zvec-java** 是 [Zvec](https://github.com/alibaba/zvec) 向量数据库 C API 的工业级 Java 语言绑定,底层基于 [JavaCPP](https://github.com/bytedeco/javacpp) 生成 JNI 绑定。JavaCPP 会从 `zvec/c_api.h` 自动生成 JNI 胶水代码,并将各平台原生库打包进 JAR、运行时自动解压加载,**无需任何手写 JNI 代码,也无需用户手动配置库路径**。
 
@@ -17,7 +17,64 @@
 - **Java 8+**:最低兼容 Java 8
 - **120 个单元测试**:全部通过;关键 DML/DQL 采用强断言(topK 数量/score 排序/PK 命中、update 回读、delete 移除校验)。涉及平台受限索引的用例在 zvec 未编译该索引的平台上自动跳过
 
+## 安装
+
+发布产物已上传 **Maven Central**,坐标为 `org.zvec:zvec-java`。加上依赖就是全部准备工作:JAR 内已经带了各平台原生库和 cppjieba 词表,**不需要单独安装原生库,也不需要配置任何库路径**。
+
+**Maven**
+
+```xml
+<dependency>
+    <groupId>org.zvec</groupId>
+    <artifactId>zvec-java</artifactId>
+    <version>0.7.0</version>
+</dependency>
+```
+
+**Gradle**
+
+```groovy
+implementation 'org.zvec:zvec-java:0.7.0'
+```
+
+`org.bytedeco:javacpp` 会作为传递依赖自动引入,无需自己声明。运行环境要求 Java 8 及以上。
+
+对外 API 都在 `org.zvec.binding` 包下:`Zvec`、`Collection`、`Doc`、`Schema`、`IndexParams`、`VectorQuery` 等都在这里,而不是 `org.zvec`。
+
+### 选择哪个产物
+
+版本号跟随内置的 zvec 原生库版本:`0.7.0` 对应 zvec v0.7.0。
+
+| 产物 | 内容 | 适用场景 |
+|------|------|----------|
+| *(不带 classifier)* | classes + jieba 词表 + **全部**受支持平台的原生库 | 想用一个依赖跑遍所有平台。最省事,体积最大。 |
+| `macosx-arm64` | classes + jieba 词表 + macOS ARM64 原生库 | 部署平台确定,想要更小的体积。 |
+| `linux-x86_64` | classes + jieba 词表 + Linux x86_64 原生库 | 同上,Linux x86_64。 |
+| `windows-x86_64` | classes + jieba 词表 + Windows x86_64 原生库 | 同上,Windows x86_64。 |
+| `nolib` | classes + jieba 词表,**不含**原生库 | 自己编译或分发 `zvec_c_api`,再让加载器指向它(见[原生库如何加载?](#原生库如何加载))。 |
+
+指定单平台 classifier:
+
+```xml
+<dependency>
+    <groupId>org.zvec</groupId>
+    <artifactId>zvec-java</artifactId>
+    <version>0.7.0</version>
+    <classifier>linux-x86_64</classifier>
+</dependency>
+```
+
+```groovy
+implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
+```
+
+受支持平台:macOS ARM64、Linux x86_64、Windows x86_64。各类索引的平台可用性仍与 zvec 本身一致(见[特性](#特性))。
+
+接下来直接看[代码示例](#代码示例)即可,唯一需要的初始化调用是 `Zvec.initialize(null)`。
+
 ## 快速开始
+
+以下内容是从源码构建绑定的流程,适用于开发调试,或者需要为发布产物未覆盖的平台/架构自行编译原生库的场景。如果只是想**使用** zvec-java,按[安装](#安装)加上 Maven Central 依赖就够了,可以直接跳到[代码示例](#代码示例)。
 
 ### 前置条件
 
@@ -243,7 +300,7 @@ java -Dzvec.native.path=/path/to/zvec/build/lib -jar app.jar
 ZVEC_NATIVE_PATH=/path/to/zvec/build/lib java -jar app.jar
 ```
 
-本地 `mvn package` 产出的 fat JAR 只含**构建时所在平台**的原生库;而 CI 的 **Publish JAR** 工作流会在各平台分别构建、聚合出**含全部平台原生库的多平台 fat JAR**(见 `.github/workflows/publish-jar.yml`)。
+本地 `mvn package` 产出的 fat JAR 只含**构建时所在平台**的原生库;而 CI 的 **Publish JAR** 工作流会在各平台分别构建、聚合出**含全部平台原生库的多平台 fat JAR**(见 `.github/workflows/publish-jar.yml`)。发布到 Maven Central 的 `org.zvec:zvec-java` 就是这个多平台 JAR,同时还会发布[安装](#安装)一节中列出的单平台 classifier JAR 与 `nolib` JAR。
 
 ### `Collection.fetch()` 返回空 / InvalidArgument
 
