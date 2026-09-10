@@ -142,20 +142,57 @@ jobs:
           key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
 
       # --- Locate the directory that holds the built library / import lib ---
+      # JavaCPP links against <linkPaths> and copies the runtime library out of
+      # that very same directory (copyLibs=true in pom.xml), so the link library
+      # and the runtime library must sit side by side. Windows splits the CMake
+      # output: the import library zvec_c_api.lib lands in build/lib while the
+      # runtime zvec_c_api.dll lands in build/bin. Resolving build/lib alone
+      # therefore produces a Windows bundle holding only the JNI glue, which
+      # links fine but fails to load at runtime, so pull the DLL across.
       - name: Resolve zvec lib directory
         shell: bash
         run: |
+          find_runtime_lib() {
+            find "$1" -maxdepth 1 -type f \
+              \( -name '*zvec_c_api*.dll' -o -name '*zvec_c_api*.so*' -o -name '*zvec_c_api*.dylib' \) \
+              2>/dev/null | head -n1
+          }
           for d in \
             "$GITHUB_WORKSPACE/zvec/build/lib/Release" \
             "$GITHUB_WORKSPACE/zvec/build/lib" \
             "$GITHUB_WORKSPACE/zvec/build/bin/Release" \
             "$GITHUB_WORKSPACE/zvec/build/bin"; do
             if [ -d "$d" ] && ls "$d"/*zvec_c_api* >/dev/null 2>&1; then
-              echo "ZVEC_LIB_DIR=$d" >> "$GITHUB_ENV"
+              ZVEC_LIB_DIR="$d"
               echo "Using zvec lib dir: $d"
               break
             fi
           done
+          if [ -z "$ZVEC_LIB_DIR" ]; then
+            echo "::error::No zvec_c_api build output found under zvec/build"
+            exit 1
+          fi
+          if [ -z "$(find_runtime_lib "$ZVEC_LIB_DIR")" ]; then
+            for b in \
+              "$GITHUB_WORKSPACE/zvec/build/bin/Release" \
+              "$GITHUB_WORKSPACE/zvec/build/bin"; do
+              if [ -d "$b" ] && [ -n "$(find_runtime_lib "$b")" ]; then
+                echo "Copying runtime library from $b into $ZVEC_LIB_DIR"
+                find "$b" -maxdepth 1 -type f -name '*zvec_c_api*' \
+                  \( -name '*.dll' -o -name '*.so*' -o -name '*.dylib' \) \
+                  -exec cp {} "$ZVEC_LIB_DIR"/ \;
+                break
+              fi
+            done
+          fi
+          if [ -z "$(find_runtime_lib "$ZVEC_LIB_DIR")" ]; then
+            echo "::error::zvec_c_api runtime library (.dll/.so/.dylib) is not present in $ZVEC_LIB_DIR"
+            find "$GITHUB_WORKSPACE/zvec/build" -maxdepth 2 -name '*zvec_c_api*' -print
+            exit 1
+          fi
+          echo "ZVEC_LIB_DIR=$ZVEC_LIB_DIR" >> "$GITHUB_ENV"
+          echo "=== zvec_c_api files in $ZVEC_LIB_DIR ==="
+          find "$ZVEC_LIB_DIR" -maxdepth 1 -name '*zvec_c_api*' -exec ls -la {} \;
 
       # --- Compile the JavaCPP JNI glue and copy libs into target/classes ---
       - name: Build JNI glue (mvn package)
@@ -182,7 +219,17 @@ jobs:
           PLATNAME=$(basename "$PLATDIR")
           echo "JavaCPP platform: $PLATNAME"
           mkdir -p "staging/$PLATNAME"
-          cp "$PLATDIR"/* "staging/$PLATNAME/"
+          # Only runtime shared libraries belong in the JAR; the MSVC import
+          # library and export file the compiler drops next to the glue would
+          # just add dead weight to every artifact.
+          find "$PLATDIR" -maxdepth 1 -type f \
+            \( -name '*.dll' -o -name '*.so*' -o -name '*.dylib' \) \
+            -exec cp {} "staging/$PLATNAME/" \;
+          if [ -z "$(ls -A "staging/$PLATNAME")" ]; then
+            echo "::error::No runtime native library staged out of $PLATDIR"
+            ls -la "$PLATDIR" || true
+            exit 1
+          fi
           echo "=== Staged native bundle ($PLATNAME) ==="
           ls -la "staging/$PLATNAME/"
 
@@ -305,18 +352,31 @@ jobs:
         shell: bash
         run: |
           JAR=$(ls target/zvec-java-*-with-dependencies.jar | head -n1)
+          ENTRIES=$(jar tf "$JAR")
           echo "=== Native libraries inside $JAR ==="
-          jar tf "$JAR" | grep -E '(macosx|linux|windows).*\.(dylib|so|dll)$' | sort
+          echo "$ENTRIES" | grep -E '(macosx|linux|windows).*\.(dylib|so|dll)$' | sort
+          # Both halves of the native stack have to be there for every platform:
+          # the JavaCPP JNI glue and the zvec C-API runtime library. Asserting
+          # only "some native file exists" lets a Windows bundle that ships
+          # jniZvecNative.dll without zvec_c_api.dll pass and then blow up with
+          # an UnsatisfiedLinkError on the consumer's machine.
           for p in macosx linux windows; do
-            if ! jar tf "$JAR" | grep -qE "${p}.*\.(dylib|so|dll)$"; then
-              echo "::error::No native library found for platform '$p' in the fat JAR"
-              exit 1
-            fi
+            case "$p" in
+              macosx)  ext='dylib' ;;
+              linux)   ext='so' ;;
+              windows) ext='dll' ;;
+            esac
+            for lib in jniZvecNative zvec_c_api; do
+              if ! echo "$ENTRIES" | grep -qE "${p}.*${lib}.*\.${ext}(\.[0-9.]+)?$"; then
+                echo "::error::${lib} runtime library for platform '$p' is missing from the fat JAR"
+                exit 1
+              fi
+            done
           done
           echo "=== Bundled jieba FTS dict inside $JAR ==="
-          jar tf "$JAR" | grep 'zvec/jieba_dict/' || true
+          echo "$ENTRIES" | grep 'zvec/jieba_dict/' || true
           for f in jieba.dict.utf8 hmm_model.utf8; do
-            if ! jar tf "$JAR" | grep -q "zvec/jieba_dict/$f"; then
+            if ! echo "$ENTRIES" | grep -q "zvec/jieba_dict/$f"; then
               echo "::error::jieba dict file zvec/jieba_dict/$f missing from the fat JAR"
               exit 1
             fi
