@@ -40,13 +40,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
       # --- Set up Java ---
       - name: Set up JDK 11
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '11'
@@ -64,7 +64,7 @@ jobs:
       # half-built tree is never cached.
       - name: Restore zvec build cache
         id: cache-zvec
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: zvec/build
           key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
@@ -72,7 +72,7 @@ jobs:
       # --- Unix build tools ---
       - name: Set up Python (for CMake / Ninja)
         if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.10'
 
@@ -130,7 +130,7 @@ jobs:
       # never a reason to fail the build.
       - name: Save zvec build cache
         if: always() && steps.cache-zvec.outputs.cache-hit != 'true' && hashFiles('zvec/build/.zvec-build-ok') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: zvec/build
@@ -220,12 +220,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           lfs: true
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '11'

@@ -56,12 +56,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '11'
@@ -76,7 +76,7 @@ jobs:
       # Restore-only; see the gated save step after the build steps below.
       - name: Restore zvec build cache
         id: cache-zvec
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: zvec/build
           key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
@@ -84,7 +84,7 @@ jobs:
       # --- Unix build toolchain ---
       - name: Set up Python (for CMake / Ninja)
         if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.10'
 
@@ -135,7 +135,7 @@ jobs:
       # stored this key.
       - name: Save zvec build cache
         if: always() && steps.cache-zvec.outputs.cache-hit != 'true' && hashFiles('zvec/build/.zvec-build-ok') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: zvec/build
@@ -234,7 +234,7 @@ jobs:
           ls -la "staging/$PLATNAME/"
 
       - name: Upload native bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: natives-${{ matrix.name }}
           path: staging/
@@ -248,7 +248,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Submodules are needed: the JavaCPP parser reads the zvec headers to
           # regenerate the git-ignored ZvecNative.java, and the compiler links
@@ -256,7 +256,7 @@ jobs:
           submodules: recursive
 
       - name: Set up JDK 11
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '11'
@@ -271,14 +271,14 @@ jobs:
       # Restore-only; see the gated save step after the build step below.
       - name: Restore zvec build cache
         id: cache-zvec
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: zvec/build
           key: zvec-build-linux-x64-${{ steps.zvec.outputs.sha }}
 
       - name: Set up Python (for CMake / Ninja)
         if: steps.cache-zvec.outputs.cache-hit != 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.10'
 
@@ -306,14 +306,14 @@ jobs:
       # stored this key.
       - name: Save zvec build cache
         if: always() && steps.cache-zvec.outputs.cache-hit != 'true' && hashFiles('zvec/build/.zvec-build-ok') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: zvec/build
           key: zvec-build-linux-x64-${{ steps.zvec.outputs.sha }}
 
       - name: Download prebuilt native bundles
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: natives-*
           path: native-artifacts
@@ -383,7 +383,7 @@ jobs:
           done
 
       - name: Upload JAR artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zvec-java-jars
           path: |
