@@ -4,8 +4,9 @@
 # org.duckdb:duckdb_jdbc. Outputs:
 #
 #   target/zvec-java-<version>-macosx-arm64.jar     (classes + jieba dict +
-#   target/zvec-java-<version>-linux-x86_64.jar      that platform's natives
-#   target/zvec-java-<version>-windows-x86_64.jar    only)
+#   target/zvec-java-<version>-linux-x86_64.jar       that platform's natives
+#   target/zvec-java-<version>-linux-arm64.jar        only)
+#   target/zvec-java-<version>-windows-x86_64.jar
 #   target/zvec-java-<version>-nolib.jar            (classes + dict, no natives)
 #
 # Natives inside the classifier JARs are normalized to the JavaCPP package
@@ -36,7 +37,7 @@ cd "$PROJECT_DIR"
 CLASSES_DIR="target/classes"
 TARGET_DIR="target"
 PKG="org/zvec/binding"
-PLATFORMS="macosx-arm64 linux-x86_64 windows-x86_64"
+PLATFORMS="macosx-arm64 linux-x86_64 linux-arm64 windows-x86_64"
 
 if [ ! -d "$CLASSES_DIR" ]; then
   echo "error: $CLASSES_DIR not found - run 'mvn package' first" >&2

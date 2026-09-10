@@ -390,6 +390,11 @@
                                             <type>jar</type>
                                         </artifact>
                                         <artifact>
+                                            <file>${project.build.directory}/zvec-java-${project.version}-linux-arm64.jar</file>
+                                            <classifier>linux-arm64</classifier>
+                                            <type>jar</type>
+                                        </artifact>
+                                        <artifact>
                                             <file>${project.build.directory}/zvec-java-${project.version}-windows-x86_64.jar</file>
                                             <classifier>windows-x86_64</classifier>
                                             <type>jar</type>
