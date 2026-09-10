@@ -69,6 +69,18 @@ jobs:
           java-version: '11'
           cache: maven
 
+      # The manylinux image ships no Maven, and the runner's preinstalled
+      # /usr/share/maven is not visible inside a container job. The linux leg
+      # needs it for the "Verify Maven compile with vendor libs" step below.
+      - name: Install Maven (Linux container)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          MVN_VERSION=3.9.16
+          curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz" \
+            | tar -xz -C /opt
+          echo "/opt/apache-maven-${MVN_VERSION}/bin" >> "$GITHUB_PATH"
+
       # --- Version-anchored cache (same key family as publish-jar.yml, so
       #     both workflows share one cache): keyed by the zvec submodule commit ---
       - name: Resolve zvec submodule commit
