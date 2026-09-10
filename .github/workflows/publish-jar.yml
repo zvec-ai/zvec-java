@@ -43,16 +43,31 @@ jobs:
   build-natives:
     name: Natives (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
+    # The Linux leg runs inside the same manylinux_2_28 image upstream zvec uses
+    # for its prebuilt SDK (see zvec/.github/workflows/_build_prebuilt.yml), so
+    # the .so we ship still loads on glibc 2.28 distros - CentOS 8, RHEL 8,
+    # Ubuntu 20.04. Building on the bare ubuntu-24.04 runner links against glibc
+    # 2.39 and yields a library that demands GLIBC_2.38, which only Ubuntu
+    # 23.10+, Debian 13 and Fedora 38+ can satisfy. macOS and Windows need no
+    # container: macos-15 and windows-2025 are exactly what upstream builds on.
+    container: ${{ matrix.container || null }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: darwin-arm64
             runner: macos-15
+            container: ''
+            cache_abi: host
           - name: linux-x64
             runner: ubuntu-24.04
+            # Pinned dated tag, the same batch upstream uses.
+            container: 'quay.io/pypa/manylinux_2_28_x86_64:2026.03.01-1'
+            cache_abi: manylinux_2_28
           - name: windows-x64
             runner: windows-2025
+            container: ''
+            cache_abi: host
 
     steps:
       - name: Checkout code
@@ -67,6 +82,17 @@ jobs:
           java-version: '11'
           cache: maven
 
+      # The manylinux image ships no Maven, and the runner's preinstalled
+      # /usr/share/maven is not visible inside a container job.
+      - name: Install Maven (Linux container)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          MVN_VERSION=3.9.16
+          curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz" \
+            | tar -xz -C /opt
+          echo "/opt/apache-maven-${MVN_VERSION}/bin" >> "$GITHUB_PATH"
+
       # --- Version-anchored cache: keyed by the zvec submodule commit ---
       - name: Resolve zvec submodule commit
         id: zvec
@@ -79,11 +105,13 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: zvec/build
-          key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
+          # cache_abi is part of the key so switching the Linux build into the
+          # manylinux container cannot reuse a host-glibc build tree.
+          key: zvec-build-${{ matrix.name }}-${{ matrix.cache_abi }}-${{ steps.zvec.outputs.sha }}
 
       # --- Unix build toolchain ---
       - name: Set up Python (for CMake / Ninja)
-        if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        if: runner.os == 'macOS' && steps.cache-zvec.outputs.cache-hit != 'true'
         uses: actions/setup-python@v7
         with:
           python-version: '3.10'
@@ -92,8 +120,17 @@ jobs:
         if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          python -m pip install --upgrade pip cmake==3.30.0 ninja==1.11.1
-          echo "$(python -c 'import site; print(site.USER_BASE)')/bin" >> $GITHUB_PATH
+          if [ "$(uname -s)" = "Linux" ]; then
+            # setup-python is skipped inside the container: the CPython it
+            # downloads is built for the host glibc and will not run in a
+            # glibc 2.28 image. Use the bundled CPython instead, the same way
+            # upstream zvec's _build_prebuilt.yml does.
+            PYBIN=$(ls -d /opt/python/cp3*/bin | head -1)
+            echo "$PYBIN" >> "$GITHUB_PATH"
+            export PATH="$PYBIN:$PATH"
+          fi
+          python3 -m pip install --upgrade pip cmake==3.30.0 ninja==1.11.1
+          echo "$(python3 -c 'import site; print(site.USER_BASE)')/bin" >> "$GITHUB_PATH"
 
       # --- Windows build toolchain ---
       - name: Set up MSVC (Windows)
@@ -139,7 +176,7 @@ jobs:
         continue-on-error: true
         with:
           path: zvec/build
-          key: zvec-build-${{ matrix.name }}-${{ steps.zvec.outputs.sha }}
+          key: zvec-build-${{ matrix.name }}-${{ matrix.cache_abi }}-${{ steps.zvec.outputs.sha }}
 
       # --- Locate the directory that holds the built library / import lib ---
       # JavaCPP links against <linkPaths> and copies the runtime library out of
@@ -246,6 +283,11 @@ jobs:
     name: Build JAR
     needs: build-natives
     runs-on: ubuntu-24.04
+    # This job compiles the linux zvec_c_api and the linux JNI glue that end up
+    # in every JAR variant, so it has to run in the same manylinux_2_28 image as
+    # the build-natives linux leg - otherwise the shipped .so files demand
+    # GLIBC_2.38 and refuse to load on CentOS 8 / RHEL 8 / Ubuntu 20.04.
+    container: 'quay.io/pypa/manylinux_2_28_x86_64:2026.03.01-1'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -262,6 +304,16 @@ jobs:
           java-version: '11'
           cache: maven
 
+      # The manylinux image ships no Maven, and the runner's preinstalled
+      # /usr/share/maven is not visible inside a container job.
+      - name: Install Maven (Linux container)
+        shell: bash
+        run: |
+          MVN_VERSION=3.9.16
+          curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries/apache-maven-${MVN_VERSION}-bin.tar.gz" \
+            | tar -xz -C /opt
+          echo "/opt/apache-maven-${MVN_VERSION}/bin" >> "$GITHUB_PATH"
+
       # --- Version-anchored cache for the linux zvec build (JNI glue compile) ---
       - name: Resolve zvec submodule commit
         id: zvec
@@ -274,20 +326,20 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: zvec/build
-          key: zvec-build-linux-x64-${{ steps.zvec.outputs.sha }}
-
-      - name: Set up Python (for CMake / Ninja)
-        if: steps.cache-zvec.outputs.cache-hit != 'true'
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.10'
+          key: zvec-build-linux-x64-manylinux_2_28-${{ steps.zvec.outputs.sha }}
 
       - name: Install build tools
         if: steps.cache-zvec.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          python -m pip install --upgrade pip cmake==3.30.0 ninja==1.11.1
-          echo "$(python -c 'import site; print(site.USER_BASE)')/bin" >> $GITHUB_PATH
+          # setup-python cannot be used here: the CPython it downloads is built
+          # for the host glibc and will not run inside this glibc 2.28 image.
+          # Use the image's bundled CPython, as upstream zvec does.
+          PYBIN=$(ls -d /opt/python/cp3*/bin | head -1)
+          echo "$PYBIN" >> "$GITHUB_PATH"
+          export PATH="$PYBIN:$PATH"
+          python3 -m pip install --upgrade pip cmake==3.30.0 ninja==1.11.1
+          echo "$(python3 -c 'import site; print(site.USER_BASE)')/bin" >> "$GITHUB_PATH"
 
       - name: Build C-API library (linux)
         if: steps.cache-zvec.outputs.cache-hit != 'true'
@@ -310,7 +362,7 @@ jobs:
         continue-on-error: true
         with:
           path: zvec/build
-          key: zvec-build-linux-x64-${{ steps.zvec.outputs.sha }}
+          key: zvec-build-linux-x64-manylinux_2_28-${{ steps.zvec.outputs.sha }}
 
       - name: Download prebuilt native bundles
         uses: actions/download-artifact@v8
@@ -382,6 +434,34 @@ jobs:
             fi
           done
 
+      - name: Verify the linux natives stay glibc 2.28 compatible
+        shell: bash
+        run: |
+          # The linux libraries are built in manylinux_2_28 so they keep loading
+          # on CentOS 8 / RHEL 8 / Ubuntu 20.04. Building them on the bare
+          # runner instead links glibc 2.39 and produces a library that demands
+          # GLIBC_2.38 - loadable only on Ubuntu 23.10+, Debian 13 and Fedora
+          # 38+. Check the exact files every JAR variant packs: the main JAR,
+          # the per-platform classifier JARs and the shaded one.
+          LIMIT=2.28
+          LIBDIR=target/classes/org/zvec/binding/linux-x86_64
+          if ! command -v objdump >/dev/null 2>&1; then
+            echo "::warning::objdump is unavailable, skipping the glibc floor check"
+            exit 0
+          fi
+          if [ -z "$(find "$LIBDIR" -maxdepth 1 -name '*.so' -print -quit 2>/dev/null)" ]; then
+            echo "::error::no linux native library found under $LIBDIR"
+            exit 1
+          fi
+          for so in "$LIBDIR"/*.so; do
+            MAX=$(objdump -T "$so" | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sed 's/GLIBC_//' | sort -uV | tail -1)
+            echo "$(basename "$so"): highest versioned GLIBC symbol = ${MAX:-none}"
+            if [ -n "$MAX" ] && [ "$(printf '%s\n%s\n' "$MAX" "$LIMIT" | sort -V | tail -1)" != "$LIMIT" ]; then
+              echo "::error::$(basename "$so") requires GLIBC_$MAX but the floor is GLIBC_$LIMIT - it was not built inside the manylinux_2_28 container"
+              exit 1
+            fi
+          done
+
       - name: Upload JAR artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -404,7 +484,12 @@ jobs:
         if: inputs.deploy_central
         env:
           GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
-        run: echo "$GPG_SIGNING_KEY" | base64 -d | gpg --batch --import
+        run: |
+          # This job now runs inside the manylinux image, which is not
+          # guaranteed to ship gpg; maven-gpg-plugin needs it to sign.
+          command -v gpg >/dev/null 2>&1 || dnf install -y gnupg2 >/dev/null \
+            || yum install -y gnupg2 >/dev/null
+          echo "$GPG_SIGNING_KEY" | base64 -d | gpg --batch --import
 
       - name: Write Central Portal settings.xml
         if: inputs.deploy_central
