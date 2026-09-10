@@ -56,6 +56,7 @@ The version tracks the bundled zvec native version: `0.7.0` ships zvec v0.7.0.
 | *(no classifier)* | classes + jieba dict + natives for **all** supported platforms | You want one dependency that runs anywhere. Simplest choice, largest download. |
 | `macosx-arm64` | classes + jieba dict + macOS ARM64 natives | You deploy to a single known platform and want a smaller artifact. |
 | `linux-x86_64` | classes + jieba dict + Linux x86_64 natives | Same, for Linux x86_64. |
+| `linux-arm64` | classes + jieba dict + Linux ARM64 natives | Same, for Linux ARM64. |
 | `windows-x86_64` | classes + jieba dict + Windows x86_64 natives | Same, for Windows x86_64. |
 | `nolib` | classes + jieba dict, **no** natives | You build or ship `zvec_c_api` yourself and point the loader at it (see [How are native libraries loaded?](#how-are-native-libraries-loaded)). |
 
@@ -74,11 +75,11 @@ Single-platform classifiers:
 implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 ```
 
-Supported platforms: macOS ARM64, Linux x86_64 and Windows x86_64. The Linux
-native libraries are built in the `manylinux_2_28` image and need glibc 2.27 or
-newer, so Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ and Fedora 28+ are all
-covered. Per-index platform availability still follows zvec itself (see
-[Features](#features)).
+Supported platforms: macOS ARM64, Linux x86_64, Linux ARM64 and Windows x86_64.
+The Linux native libraries are built in the `manylinux_2_28` images and need
+glibc 2.27 or newer, so Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ and Fedora
+28+ are all covered. Per-index platform availability still follows zvec itself
+(see [Features](#features)).
 
 From here, jump to [Code Examples](#code-examples) — `Zvec.initialize(null)` is
 the only setup call you need.

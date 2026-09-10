@@ -50,6 +50,7 @@ implementation 'org.zvec:zvec-java:0.7.0'
 | *(不带 classifier)* | classes + jieba 词表 + **全部**受支持平台的原生库 | 想用一个依赖跑遍所有平台。最省事,体积最大。 |
 | `macosx-arm64` | classes + jieba 词表 + macOS ARM64 原生库 | 部署平台确定,想要更小的体积。 |
 | `linux-x86_64` | classes + jieba 词表 + Linux x86_64 原生库 | 同上,Linux x86_64。 |
+| `linux-arm64` | classes + jieba 词表 + Linux ARM64 原生库 | 同上,Linux ARM64。 |
 | `windows-x86_64` | classes + jieba 词表 + Windows x86_64 原生库 | 同上,Windows x86_64。 |
 | `nolib` | classes + jieba 词表,**不含**原生库 | 自己编译或分发 `zvec_c_api`,再让加载器指向它(见[原生库如何加载?](#原生库如何加载))。 |
 
@@ -68,7 +69,7 @@ implementation 'org.zvec:zvec-java:0.7.0'
 implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 ```
 
-受支持平台:macOS ARM64、Linux x86_64、Windows x86_64。Linux 原生库在 `manylinux_2_28` 镜像中构建,要求 glibc 2.27 及以上,因此 Ubuntu 18.04+、Debian 10+、RHEL/CentOS 8+、Fedora 28+ 均可使用。各类索引的平台可用性仍与 zvec 本身一致(见[特性](#特性))。
+受支持平台:macOS ARM64、Linux x86_64、Linux ARM64、Windows x86_64。Linux 原生库在 `manylinux_2_28` 镜像中构建,要求 glibc 2.27 及以上,因此 Ubuntu 18.04+、Debian 10+、RHEL/CentOS 8+、Fedora 28+ 均可使用。各类索引的平台可用性仍与 zvec 本身一致(见[特性](#特性))。
 
 接下来直接看[代码示例](#代码示例)即可,唯一需要的初始化调用是 `Zvec.initialize(null)`。
 
