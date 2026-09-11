@@ -19,6 +19,7 @@
 #   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0
 #   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0 --classifier linux-arm64
 #   scripts/smoke-test.sh --jar zvec-java-0.7.0-nolib.jar --lib-dir /opt/zvec/lib
+#   scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar --expect-version v0.7.0
 #
 # Options:
 #   --jar PATH         the zvec-java JAR to test
@@ -27,6 +28,8 @@
 #   --classifier C     resolve a single-platform classifier JAR from --repo
 #   --javacpp PATH     javacpp JAR; auto-resolved from ~/.m2, mvn or repo1 if omitted
 #   --lib-dir DIR      natives dir for a nolib JAR, passed as -Dzvec.native.path
+#   --expect-version V release version the natives must report (vX.Y.Z); guards
+#                      against a build that fell back to zvec's v0.0.0 dummy
 #   --keep             do not delete the temporary work directory
 #
 set -euo pipefail
@@ -36,6 +39,7 @@ SOURCE="$SCRIPT_DIR/smoke-test/SmokeTest.java"
 CENTRAL_BASE="https://repo1.maven.org/maven2"
 
 JAR="" REPO="" VERSION="0.7.0" CLASSIFIER="" JAVACPP="" LIB_DIR="" KEEP=0
+EXPECT_VERSION=""
 WORK="$(mktemp -d)"
 
 # Print the header comment block above; stops at the first non-comment line,
@@ -74,6 +78,7 @@ while [ $# -gt 0 ]; do
     --classifier) CLASSIFIER="${2:?}"; shift 2 ;;
     --javacpp)    JAVACPP="${2:?}"; shift 2 ;;
     --lib-dir)    LIB_DIR="${2:?}"; shift 2 ;;
+    --expect-version) EXPECT_VERSION="${2:?}"; shift 2 ;;
     --keep)       KEEP=1; shift ;;
     -h|--help)    usage; exit 0 ;;
     -*)           die "unknown option $1 (see --help)" ;;
@@ -151,6 +156,11 @@ mkdir -p "$WORK/classes"
 javac -encoding UTF-8 -cp "$CP" -d "$WORK/classes" "$SOURCE"
 
 JAVA_OPTS=(-Dfile.encoding=UTF-8)
+if [ -n "$EXPECT_VERSION" ]; then
+  # Accept a bare 0.7.0 as well as v0.7.0; the library itself reports the v.
+  case "$EXPECT_VERSION" in v*) ;; *) EXPECT_VERSION="v$EXPECT_VERSION" ;; esac
+  JAVA_OPTS+=("-Dzvec.smoke.expectVersion=$EXPECT_VERSION")
+fi
 if [ -n "$LIB_DIR" ]; then
   # Tier 1 native resolution, for a nolib classifier JAR that ships no .so.
   JAVA_OPTS+=("-Dzvec.native.path=$LIB_DIR")

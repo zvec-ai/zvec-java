@@ -79,6 +79,7 @@ public final class SmokeTest {
         String version = Zvec.getVersion();
         System.out.println("  zvec version     = " + version);
         check(version != null && !version.isEmpty(), "Zvec.getVersion() returned nothing");
+        verifyVersion(version);
 
         banner("2. Extract the bundled jieba dictionary");
         check(Zvec.isJiebaDictAvailable(), "no jieba dict registered after initialize");
@@ -190,6 +191,52 @@ public final class SmokeTest {
                     "jieba FTS query matched nothing - the bundled dictionary is not wired up");
             Doc.freeDocs(hits);
         }
+    }
+
+    /**
+     * Asserts the native library reports the version this artifact was released
+     * as, when the caller supplies one via {@code --expect-version}.
+     *
+     * <p>zvec resolves its version from {@code git describe --tags} at configure
+     * time and falls back to a deliberate dummy {@code v0.0.0} when it cannot -
+     * which is what happens in CI, where the submodule is checked out detached
+     * and without tags. The dummy then surfaces to every consumer through
+     * {@link Zvec#getVersion()} and {@link Zvec#getVersionMajor()}, so the
+     * release build passes {@code -DOVERRIDE_GIT_DESCRIBE}. This check is what
+     * keeps that plumbing honest: if the override ever stops reaching cmake,
+     * the smoke test fails instead of silently shipping a 0.0.0 version.
+     */
+    private static void verifyVersion(String reported) {
+        String expected = System.getProperty("zvec.smoke.expectVersion", "").trim();
+        if (expected.isEmpty()) {
+            System.out.println("  version check    = skipped (no --expect-version given)");
+            return;
+        }
+        // A describe suffix such as "-3-gabc1234" is legitimate, so only the
+        // leading vX.Y.Z has to match - but it has to match exactly.
+        check(reported.startsWith(expected),
+                "the native library reports version '" + reported + "', expected '" + expected
+                        + "' - OVERRIDE_GIT_DESCRIBE did not reach the cmake configure step");
+
+        int[] want = parseVersion(expected);
+        int[] got = {Zvec.getVersionMajor(), Zvec.getVersionMinor(), Zvec.getVersionPatch()};
+        System.out.println("  version parts    = " + got[0] + "." + got[1] + "." + got[2]
+                + " (expected " + want[0] + "." + want[1] + "." + want[2] + ")");
+        String[] accessor = {"Major", "Minor", "Patch"};
+        for (int i = 0; i < 3; i++) {
+            check(got[i] == want[i], "Zvec.getVersion" + accessor[i] + "() returned " + got[i]
+                    + ", expected " + want[i] + " for release " + expected);
+        }
+    }
+
+    private static int[] parseVersion(String version) {
+        String digits = version.startsWith("v") ? version.substring(1) : version;
+        String[] parts = digits.split("[.-]");
+        int[] out = new int[3];
+        for (int i = 0; i < 3; i++) {
+            out[i] = i < parts.length ? Integer.parseInt(parts[i]) : 0;
+        }
+        return out;
     }
 
     private static float[] randomVector() {
