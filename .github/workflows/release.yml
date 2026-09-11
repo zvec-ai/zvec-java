@@ -91,19 +91,40 @@ jobs:
           echo "/opt/apache-maven-${MVN_VERSION}/bin" >> "$GITHUB_PATH"
 
       # --- Version-anchored cache (same key family as publish-jar.yml, so
-      #     both workflows share one cache): keyed by the zvec submodule commit ---
-      - name: Resolve zvec submodule commit
+      #     both workflows share one cache): keyed by the zvec submodule commit
+      #     and the release tag, which is compiled into the library ---
+      - name: Resolve zvec submodule commit and version
         id: zvec
         shell: bash
-        run: echo "sha=$(git -C zvec rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$(git -C zvec rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # zvec/cmake/version.cmake derives the version from `git describe
+          # --tags` and otherwise falls back to a deliberately obvious dummy
+          # v0.0.0. In CI that fallback always wins, because the submodule is
+          # checked out detached and without tags - so the released library
+          # used to report v0.0.0-g<sha> through Zvec.getVersion(), and 0.0.0
+          # through getVersionMajor/Minor/Patch. Feed the release tag in
+          # explicitly, the way upstream zvec does in _build_prebuilt.yml.
+          # Anything that is not a vX.Y.Z string is dropped rather than passed
+          # on: version.cmake raises FATAL_ERROR on a malformed override.
+          TAG="${{ inputs.tag || github.ref_name }}"
+          case "$TAG" in v*) ;; *) TAG="v$TAG" ;; esac
+          if printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::'$TAG' is not a vX.Y.Z version; the native build will report zvec's fallback version"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Restore zvec build cache
         id: cache-zvec
         uses: actions/cache/restore@v6
         with:
           path: zvec/build
-          # cache_abi keeps the host-glibc and manylinux build trees apart.
-          key: zvec-build-${{ matrix.name }}-${{ matrix.cache_abi }}-${{ steps.zvec.outputs.sha }}
+          # cache_abi keeps the host-glibc and manylinux build trees apart, and
+          # the tag keeps builds with different OVERRIDE_GIT_DESCRIBE values
+          # apart, since that string is compiled into the library.
+          key: zvec-build-${{ matrix.name }}-${{ matrix.cache_abi }}-${{ steps.zvec.outputs.sha }}-${{ steps.zvec.outputs.tag }}
 
       # --- Unix build tools ---
       - name: Set up Python (for CMake / Ninja)
@@ -141,6 +162,8 @@ jobs:
       # --- Build C-API library (skipped on cache hit) ---
       - name: Build C-API library (Unix)
         if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        env:
+          ZVEC_TAG: ${{ steps.zvec.outputs.tag }}
         run: |
           NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
           cd zvec
@@ -148,6 +171,7 @@ jobs:
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_C_BINDINGS=ON \
+            -DOVERRIDE_GIT_DESCRIBE="$ZVEC_TAG" \
             -G Ninja
           cmake --build . -j$NPROC --target zvec_c_api
           touch .zvec-build-ok
@@ -155,11 +179,14 @@ jobs:
 
       - name: Build C-API library (Windows)
         if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        env:
+          ZVEC_TAG: ${{ steps.zvec.outputs.tag }}
         run: |
           cd zvec
           New-Item -ItemType Directory -Force -Path build | Out-Null
           cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON -G Ninja
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON `
+            "-DOVERRIDE_GIT_DESCRIBE=$env:ZVEC_TAG" -G Ninja
           cmake --build . --target zvec_c_api -j $env:NUMBER_OF_PROCESSORS
           New-Item -ItemType File -Force -Path .zvec-build-ok | Out-Null
         shell: pwsh
@@ -174,7 +201,7 @@ jobs:
         continue-on-error: true
         with:
           path: zvec/build
-          key: zvec-build-${{ matrix.name }}-${{ matrix.cache_abi }}-${{ steps.zvec.outputs.sha }}
+          key: zvec-build-${{ matrix.name }}-${{ matrix.cache_abi }}-${{ steps.zvec.outputs.sha }}-${{ steps.zvec.outputs.tag }}
 
       # --- Package libraries ---
       - name: Package libraries (Unix)
