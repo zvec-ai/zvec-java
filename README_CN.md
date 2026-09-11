@@ -142,6 +142,27 @@ mvn package -DskipTests
 java -jar target/zvec-java-0.7.0-with-dependencies.jar
 ```
 
+### 对构建产物做冒烟测试
+
+`scripts/smoke-test.sh` 会按消费者的方式加载一个已构建好的 JAR 并完整跑一遍:
+JavaCPP 从 JAR 中解压出当前平台的原生库,内置的 jieba 词表被释放并注册,然后真实
+地创建一个 collection、写入数据,并分别用向量检索和 jieba 全文检索查询。它只依赖
+JDK —— 不需要 Docker、不需要 Maven、也不需要 zvec 源码。
+
+```bash
+scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar
+
+# 也可以从 Maven 目录布局中解析 JAR,例如发布前从 Central Portal 下载的
+# deployment bundle
+scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0
+scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0 --classifier linux-arm64
+```
+
+想证明产出的 `.so` 真的能在老发行版上加载,就要在 glibc 不高于文档所述下限的机器上
+跑 —— 在更新的系统上通过说明不了什么。CI 的 **Publish JAR** 工作流正是这么做的:它的
+`smoke-test` job 会在 bundle 已上传到 Central Portal、但仍停在 `VALIDATED` 状态、还没
+人点 **Publish** 的窗口里,在两种 linux 架构的 `manylinux_2_28` 容器内各跑一次。
+
 ## 项目结构
 
 ```

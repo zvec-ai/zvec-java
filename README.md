@@ -162,6 +162,30 @@ mvn package -DskipTests
 java -jar target/zvec-java-0.7.0-with-dependencies.jar
 ```
 
+### Smoke-test a built artifact
+
+`scripts/smoke-test.sh` loads an already-built JAR the way a consumer does and
+exercises it end to end: JavaCPP unpacks this platform's natives out of the JAR,
+the bundled jieba dictionary is extracted and registered, then a real collection
+is created, written to and queried by both vector search and jieba full-text
+search. It needs a JDK and nothing else — no Docker, no Maven, no zvec checkout.
+
+```bash
+scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar
+
+# Or resolve the JAR out of a Maven-layout directory, e.g. a Central Portal
+# deployment bundle downloaded before publishing it
+scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0
+scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0 --classifier linux-arm64
+```
+
+To prove the shipped `.so` files really load on an older distro, run it on a
+machine whose glibc is at or below the documented floor — passing on a newer one
+proves nothing. The CI **Publish JAR** workflow does exactly this in its
+`smoke-test` job: inside `manylinux_2_28` on both linux architectures, after the
+bundle has been uploaded to the Central Portal but while it is still sitting at
+`VALIDATED`, before anyone clicks **Publish**.
+
 ## Project Structure
 
 ```
