@@ -149,7 +149,32 @@ Required repository secrets: `CENTRAL_TOKEN_USER`, `CENTRAL_TOKEN_PASSWORD`
 (a Central Portal *user token*, not account credentials), `GPG_SIGNING_KEY`
 (base64 of the armored private key) and `GPG_SIGNING_PASSPHRASE`. The
 `org.zvec` namespace must be verified in the Portal, and the signing key must be
-on a public keyserver.
+on a public keyserver — Central fetches it from `keyserver.ubuntu.com`,
+`keys.openpgp.org` or `pgp.mit.edu`, so publishing to any one of them is enough.
+
+The release key is `1E35478A9977D23F` (fingerprint
+`7D0332FD912CE0CBD1043EE21E35478A9977D23F`,
+`zvec-java maintainers <zvec@alibaba-inc.com>`), published on
+`keyserver.ubuntu.com`. Check that it is still there before a release:
+
+```bash
+curl -sS "https://keyserver.ubuntu.com/pks/lookup?op=index&options=mr&search=0x1E35478A9977D23F"
+```
+
+A `pub:` line plus a `uid:` line means the key is published and Central can
+verify signatures with it.
+
+When rotating the key, push the new one over HKPS rather than the default
+`hkp://`. Port 11371 is blocked on many corporate networks, where `--send-keys`
+fails with `Network is unreachable` even though HTTPS to the same host works
+fine — easy to misread as "the key never got published":
+
+```bash
+gpg --keyserver hkps://keyserver.ubuntu.com --send-keys <NEW_FINGERPRINT>
+```
+
+Then refresh `GPG_SIGNING_KEY` and `GPG_SIGNING_PASSPHRASE` from the new
+private key and update the fingerprint above.
 
 ## Troubleshooting
 
