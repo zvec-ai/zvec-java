@@ -17,6 +17,13 @@ updates:
       prefix: "build"
       include: "scope"
     open-pull-requests-limit: 5
+    ignore:
+      # JUnit 6 raised its baseline from Java 8 to Java 17. This binding
+      # advertises Java 8+ and CI compiles on Temurin 11, so a major bump is
+      # not a dependency update but a decision about the project's own floor -
+      # do not spend a PR on it every week.
+      - dependency-name: "org.junit.jupiter:junit-jupiter"
+        update-types: [ "version-update:semver-major" ]
 
   # GitHub Actions: publish-jar.yml handles the Maven Central token and the GPG
   # signing key, so its actions are pinned and reviewed rather than floating.
