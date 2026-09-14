@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # Maven: the JavaCPP version has to stay in sync with the preset annotations
+  # and the generated ZvecNative, so bumps are worth a CI run rather than a
+  # silent merge.
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+      timezone: "Asia/Shanghai"
+    labels:
+      - "dependencies"
+      - "java"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions: publish-jar.yml handles the Maven Central token and the GPG
+  # signing key, so its actions are pinned and reviewed rather than floating.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "02:00"
+      timezone: "Asia/Shanghai"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    open-pull-requests-limit: 5

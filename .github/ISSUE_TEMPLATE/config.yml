@@ -1,0 +1,13 @@
+blank_issues_enabled: false
+contact_links:
+  - name: README (installation, artifacts, FAQ)
+    url: https://github.com/zvec-ai/zvec-java/blob/main/README.md
+    about: Native library loading, the jieba dictionary, artifact choice and memory management are all covered here.
+
+  - name: zvec core (C++ engine)
+    url: https://github.com/alibaba/zvec/issues
+    about: Engine-level bugs (index build, storage, query results) belong upstream, not in the Java binding.
+
+  - name: zvec documentation
+    url: https://zvec.org/
+    about: Concepts, quickstart and the C API reference.

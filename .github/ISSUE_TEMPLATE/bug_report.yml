@@ -1,0 +1,104 @@
+name: Bug Report
+description: Report a bug or unexpected behavior (crash, UnsatisfiedLinkError, wrong results, memory growth)
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A native crash or a load failure is almost always
+        explained by the platform, the JVM and which artifact was resolved, so
+        please fill in the environment fields even when the reproduction looks
+        obvious.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect?
+      placeholder: e.g. "Zvec.initialize(null) throws UnsatisfiedLinkError on Ubuntu 20.04 / Java 17"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal Java snippet or command sequence
+      render: java
+      placeholder: |
+        Zvec.initialize(null);
+        CollectionSchema schema = new CollectionSchema("c1");
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error / Stack Trace
+      description: The Java exception, or the native crash header plus the top frames of hs_err_pid*.log
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: zvec-java version
+      description: The Maven coordinate you depend on, including the classifier if you use one
+      placeholder: org.zvec:zvec-java:0.7.0 (no classifier) / :linux-x86_64 / :nolib
+    validations:
+      required: true
+
+  - type: input
+    id: jvm
+    attributes:
+      label: JVM
+      description: Vendor, version and bitness as reported by java -version
+      placeholder: Temurin 17.0.11 (64-bit)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System and Architecture
+      placeholder: Ubuntu 20.04 x86_64 (glibc 2.31) / macOS 14 arm64 / Windows Server 2022 x64
+    validations:
+      required: true
+
+  - type: dropdown
+    id: packaging
+    attributes:
+      label: How did you get the JAR?
+      options:
+        - Maven Central dependency
+        - Single-platform classifier JAR
+        - nolib JAR plus my own zvec_c_api build
+        - Built from source (mvn package)
+        - GitHub Release archive
+    validations:
+      required: true
+
+  - type: dropdown
+    id: native_path
+    attributes:
+      label: How were the native libraries resolved?
+      description: See the README FAQ "How are native libraries loaded?"
+      options:
+        - "Tier 2: bundled in the JAR (default)"
+        - "Tier 1: -Dzvec.native.path / ZVEC_NATIVE_PATH"
+        - "Tier 3: system library path (LD_LIBRARY_PATH / PATH)"
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: container
+    attributes:
+      label: Container / Packaging Environment
+      description: Base image, Dockerfile FROM line, or build-tool plugin (only if relevant)
+      placeholder: eclipse-temurin:17-jre-jammy, spring-boot-maven-plugin repackage, GraalVM native-image
+    validations:
+      required: false

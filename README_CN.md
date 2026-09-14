@@ -2,6 +2,11 @@
 
 [English](README.md) | 简体中文
 
+[![Maven Central](https://img.shields.io/maven-central/v/org.zvec/zvec-java.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/org.zvec/zvec-java)
+[![CI](https://github.com/zvec-ai/zvec-java/actions/workflows/ci.yml/badge.svg)](https://github.com/zvec-ai/zvec-java/actions/workflows/ci.yml)
+[![Java 8+](https://img.shields.io/badge/Java-8%2B-orange.svg)](#安装)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **zvec-java** 是 [Zvec](https://github.com/alibaba/zvec) 向量数据库 C API 的工业级 Java 语言绑定,底层基于 [JavaCPP](https://github.com/bytedeco/javacpp) 生成 JNI 绑定。JavaCPP 会从 `zvec/c_api.h` 自动生成 JNI 胶水代码,并将各平台原生库打包进 JAR、运行时自动解压加载,**无需任何手写 JNI 代码,也无需用户手动配置库路径**。
 
 ## 特性
@@ -324,6 +329,18 @@ ZVEC_NATIVE_PATH=/path/to/zvec/build/lib java -jar app.jar
 
 本地 `mvn package` 产出的 fat JAR 只含**构建时所在平台**的原生库;而 CI 的 **Publish JAR** 工作流会在各平台分别构建、聚合出**含全部平台原生库的多平台 fat JAR**(见 `.github/workflows/publish-jar.yml`)。发布到 Maven Central 的 `org.zvec:zvec-java` 就是这个多平台 JAR,同时还会发布[安装](#安装)一节中列出的单平台 classifier JAR 与 `nolib` JAR。
 
+### jieba 分词器如何找到词表?
+
+JAR 内置了 cppjieba 词表文件(`jieba.dict.utf8`、`hmm_model.utf8`),位于 `zvec/jieba_dict/`。`Zvec.initialize()` 期间,它们会被解压到一个按版本区分的缓存目录(默认 `~/.zvec/jieba_dict/<zvec-version>`,home 目录不可写时回退到 `<tmpdir>/zvec-java/jieba_dict/<version>`),并通过 `zvec_set_default_jieba_dict_dir()` 注册,因此创建 `jieba` 全文索引不需要任何额外配置。
+
+分词时的解析优先级(从高到低):
+
+1. 字段级 `extra_params.jieba_dict_dir`
+2. `ZVEC_JIEBA_DICT_DIR` 环境变量
+3. 进程级默认值(`ConfigData.setJiebaDictDir()` / `Zvec.setDefaultJiebaDictDir()` / 自动解压的内置词表)
+
+用 `-Dzvec.jieba.cache.dir=/dir`(或 `ZVEC_JIEBA_CACHE_DIR`)可以改变解压位置。
+
 ### `Collection.fetch()` 返回空 / InvalidArgument
 
 `fetch()` 需要目标字段建立了 **forward index**(正排索引)。确保 schema 中为需要 fetch 的字段配置了正排索引,或改用 `query()`。
@@ -336,6 +353,10 @@ ZVEC_NATIVE_PATH=/path/to/zvec/build/lib java -jar app.jar
 ### `Doc.validate(...)`
 
 Zvec C API 未提供文档级校验函数(`zvec_doc_validate` 不存在),该方法会抛出 `UnsupportedOperationException`;请改用 `CollectionSchema.validate()` / `FieldSchema.validate()`。
+
+## 参与贡献
+
+欢迎提 issue 和 pull request。构建环境、绑定遵循的约定、`NOTICE` 如何与 zvec 子模块保持同步,以及发布流程,见 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请按 [SECURITY.md](SECURITY.md) 私下报告。本项目遵循[行为准则](CODE_OF_CONDUCT.md),变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 

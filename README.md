@@ -2,6 +2,11 @@
 
 English | [简体中文](README_CN.md)
 
+[![Maven Central](https://img.shields.io/maven-central/v/org.zvec/zvec-java.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/org.zvec/zvec-java)
+[![CI](https://github.com/zvec-ai/zvec-java/actions/workflows/ci.yml/badge.svg)](https://github.com/zvec-ai/zvec-java/actions/workflows/ci.yml)
+[![Java 8+](https://img.shields.io/badge/Java-8%2B-orange.svg)](#installation)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **zvec-java** provides industrial-grade Java bindings for the [Zvec](https://github.com/alibaba/zvec) vector database C API, built on [JavaCPP](https://github.com/bytedeco/javacpp) for JNI binding generation. JavaCPP auto-generates the JNI glue from `zvec/c_api.h`, bundles the per-platform native libraries into the JAR, and extracts and loads them at runtime — **no hand-written JNI code, and no manual library-path configuration required**.
 
 ## Features
@@ -376,6 +381,15 @@ Override the extraction location with `-Dzvec.jieba.cache.dir=/dir` (or `ZVEC_JI
 ### `Doc.validate(...)`
 
 The Zvec C API provides no document-level validation function (`zvec_doc_validate` does not exist); this method throws `UnsupportedOperationException`. Use `CollectionSchema.validate()` / `FieldSchema.validate()` instead.
+
+## Contributing
+
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers
+the build setup, the conventions the binding follows, how `NOTICE` is kept in
+sync with the zvec submodule and how a release is cut. Please report security
+problems privately, as described in [SECURITY.md](SECURITY.md). This project
+follows the [Code of Conduct](CODE_OF_CONDUCT.md), and notable changes are
+tracked in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
