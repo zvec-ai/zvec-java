@@ -71,6 +71,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          # A tag push already checks out the tag; a workflow_dispatch run
+          # would otherwise check out the default branch and build libraries
+          # that do not correspond to the tag they get attached to.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           submodules: recursive
 
       - name: Set up JDK 11
@@ -439,6 +443,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # Same ref as build-libs, so the release notes and the checksums are
+          # generated from the commit that was actually built.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Determine tag
         id: tag
