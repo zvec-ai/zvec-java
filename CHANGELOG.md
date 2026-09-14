@@ -35,7 +35,12 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
 - Three-tier native library resolution (`-Dzvec.native.path` /
   `ZVEC_NATIVE_PATH`, then the JAR, then the system library path) with an
   actionable `UnsatisfiedLinkError` when all three fail.
-- Test suite of 120 tests, with strong assertions on the DML/DQL paths and
+- `ZvecException` messages carry the native error detail (code and text from
+  `zvec_get_last_error_details`), so a failed call reports what zvec said
+  instead of only naming the error code.
+- `Collection` guards every native call with a use-after-close check and exposes
+  `isOpen()`; `close()`/`destroy()` are safe to call from several threads.
+- Test suite of 122 tests, with strong assertions on the DML/DQL paths and
   `assumeTrue` skips for platform-gated indexes.
 - `scripts/smoke-test.sh`: loads a built JAR exactly as a consumer does —
   natives out of the JAR, dictionary extraction, collection create/insert/flush,

@@ -1,5 +1,6 @@
 package org.zvec.binding;
 
+import org.zvec.binding.ZvecNative.zvec_error_details_t;
 import org.zvec.binding.ZvecNative.zvec_string_array_t;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.Pointer;
@@ -65,6 +66,33 @@ final class NativeSupport {
             elems[i] = utf8(items[i]);
         }
         return new PointerPointer(elems);
+    }
+
+    /**
+     * Read the message the native layer recorded for the most recent failure on
+     * this thread, or {@code ""} when there is none. Lets a bare
+     * {@code zvec_error_code_t} surface as an exception a caller can act on.
+     *
+     * <p>The recorded error is consumed (cleared) once read, so a later failure
+     * that records no message of its own cannot inherit this one.
+     *
+     * <p>Never throws: failing to read a diagnostic must not mask the error
+     * that triggered the lookup.
+     */
+    static String lastErrorMessage() {
+        try (zvec_error_details_t details = new zvec_error_details_t()) {
+            if (ZvecNative.zvec_get_last_error_details(details) != 0) {
+                return "";
+            }
+            // Copy into a Java String before clearing: the struct holds pointers
+            // into the native thread-local message buffer, which the clear
+            // below releases.
+            String message = string(details.message());
+            ZvecNative.zvec_clear_error();
+            return message;
+        } catch (Throwable t) {
+            return "";
+        }
     }
 
     /**

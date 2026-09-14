@@ -19,6 +19,15 @@ import java.util.List;
  *
  * <p>Obtain via {@link Zvec#createAndOpen} or {@link Zvec#open}.
  * Always call {@link #close()} when done.
+ *
+ * <p>After {@link #close()} every operation on this object throws a
+ * {@link ZvecException} with {@link ErrorCode#FAILED_PRECONDITION} instead of
+ * passing a released handle into the native layer.
+ *
+ * <p>{@link #close()} and {@link #destroy()} are safe to call from any thread
+ * and are idempotent. The operations themselves are not synchronized: the
+ * native collection is safe to use from several threads, but a caller must not
+ * use a collection concurrently with closing it.
  */
 public class Collection implements AutoCloseable {
 
@@ -32,12 +41,30 @@ public class Collection implements AutoCloseable {
         return handle;
     }
 
+    /**
+     * The live native handle, or a {@link ZvecException} when this collection
+     * has already been closed. Keeps a released handle from reaching the native
+     * layer, where it would surface as a JVM crash rather than an exception.
+     */
+    private zvec_collection_t requireOpen() {
+        zvec_collection_t current = handle;
+        if (current == null || current.isNull()) {
+            throw new ZvecException(ErrorCode.FAILED_PRECONDITION, "collection is closed");
+        }
+        return current;
+    }
+
+    /** Returns {@code true} while the native handle is still usable. */
+    public boolean isOpen() {
+        return handle != null && !handle.isNull();
+    }
+
     // =========================================================================
     // Lifecycle
     // =========================================================================
 
-    /** Close the collection.  Safe to call multiple times. */
-    public void close() {
+    /** Close the collection.  Safe to call multiple times and from any thread. */
+    public synchronized void close() {
         if (handle != null && !handle.isNull()) {
             ZvecException.throwIfError(ZvecNative.zvec_collection_close(handle));
             handle = null;
@@ -45,7 +72,7 @@ public class Collection implements AutoCloseable {
     }
 
     /** Destroy collection data on disk AND close the handle. */
-    public void destroy() {
+    public synchronized void destroy() {
         if (handle != null && !handle.isNull()) {
             ZvecException.throwIfError(ZvecNative.zvec_collection_destroy(handle));
             ZvecNative.zvec_collection_close(handle);
@@ -54,11 +81,11 @@ public class Collection implements AutoCloseable {
     }
 
     public void flush() {
-        ZvecException.throwIfError(ZvecNative.zvec_collection_flush(handle));
+        ZvecException.throwIfError(ZvecNative.zvec_collection_flush(requireOpen()));
     }
 
     public void optimize() {
-        ZvecException.throwIfError(ZvecNative.zvec_collection_optimize(handle));
+        ZvecException.throwIfError(ZvecNative.zvec_collection_optimize(requireOpen()));
     }
 
     // =========================================================================
@@ -68,21 +95,21 @@ public class Collection implements AutoCloseable {
     /** Get the collection schema.  Caller must destroy the returned schema. */
     public CollectionSchema getSchema() {
         PointerPointer ref = new PointerPointer(1);
-        ZvecException.throwIfError(ZvecNative.zvec_collection_get_schema(handle, ref));
+        ZvecException.throwIfError(ZvecNative.zvec_collection_get_schema(requireOpen(), ref));
         return new CollectionSchema(new zvec_collection_schema_t(ref.get(0)));
     }
 
     /** Get the collection options.  Caller must destroy the returned options. */
     public CollectionOptions getOptions() {
         PointerPointer ref = new PointerPointer(1);
-        ZvecException.throwIfError(ZvecNative.zvec_collection_get_options(handle, ref));
+        ZvecException.throwIfError(ZvecNative.zvec_collection_get_options(requireOpen(), ref));
         return new CollectionOptions(new zvec_collection_options_t(ref.get(0)));
     }
 
     /** Get collection statistics.  The C stats pointer is consumed internally. */
     public CollectionStats getStats() {
         PointerPointer ref = new PointerPointer(1);
-        ZvecException.throwIfError(ZvecNative.zvec_collection_get_stats(handle, ref));
+        ZvecException.throwIfError(ZvecNative.zvec_collection_get_stats(requireOpen(), ref));
         return new CollectionStats(new zvec_collection_stats_t(ref.get(0)));
     }
 
@@ -92,28 +119,28 @@ public class Collection implements AutoCloseable {
 
     public void createIndex(String fieldName, IndexParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_create_index(handle, NativeSupport.utf8(fieldName), params.getHandle()));
+                ZvecNative.zvec_collection_create_index(requireOpen(), NativeSupport.utf8(fieldName), params.getHandle()));
     }
 
     public void dropIndex(String fieldName) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_drop_index(handle, NativeSupport.utf8(fieldName)));
+                ZvecNative.zvec_collection_drop_index(requireOpen(), NativeSupport.utf8(fieldName)));
     }
 
     public void addColumn(FieldSchema fieldSchema, String defaultExpr) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_add_column(handle, fieldSchema.getHandle(), NativeSupport.utf8(defaultExpr)));
+                ZvecNative.zvec_collection_add_column(requireOpen(), fieldSchema.getHandle(), NativeSupport.utf8(defaultExpr)));
     }
 
     public void dropColumn(String columnName) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_drop_column(handle, NativeSupport.utf8(columnName)));
+                ZvecNative.zvec_collection_drop_column(requireOpen(), NativeSupport.utf8(columnName)));
     }
 
     public void alterColumn(String columnName, String newName, FieldSchema newSchema) {
         zvec_field_schema_t newSchemaPtr = (newSchema != null) ? newSchema.getHandle() : null;
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_alter_column(handle, NativeSupport.utf8(columnName),
+                ZvecNative.zvec_collection_alter_column(requireOpen(), NativeSupport.utf8(columnName),
                         NativeSupport.utf8(newName), newSchemaPtr));
     }
 
@@ -159,7 +186,7 @@ public class Collection implements AutoCloseable {
         SizeTPointer success = new SizeTPointer(1);
         SizeTPointer error = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_insert(handle, handles, docs.size(), success, error));
+                ZvecNative.zvec_collection_insert(requireOpen(), handles, docs.size(), success, error));
         return new WriteResult(success.get(), error.get());
     }
 
@@ -169,7 +196,7 @@ public class Collection implements AutoCloseable {
         SizeTPointer success = new SizeTPointer(1);
         SizeTPointer error = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_update(handle, handles, docs.size(), success, error));
+                ZvecNative.zvec_collection_update(requireOpen(), handles, docs.size(), success, error));
         return new WriteResult(success.get(), error.get());
     }
 
@@ -179,7 +206,7 @@ public class Collection implements AutoCloseable {
         SizeTPointer success = new SizeTPointer(1);
         SizeTPointer error = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_upsert(handle, handles, docs.size(), success, error));
+                ZvecNative.zvec_collection_upsert(requireOpen(), handles, docs.size(), success, error));
         return new WriteResult(success.get(), error.get());
     }
 
@@ -190,13 +217,13 @@ public class Collection implements AutoCloseable {
         SizeTPointer success = new SizeTPointer(1);
         SizeTPointer error = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_delete(handle, pkPtr, pkArray.length, success, error));
+                ZvecNative.zvec_collection_delete(requireOpen(), pkPtr, pkArray.length, success, error));
         return new WriteResult(success.get(), error.get());
     }
 
     public void deleteByFilter(String filter) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_delete_by_filter(handle, NativeSupport.utf8(filter)));
+                ZvecNative.zvec_collection_delete_by_filter(requireOpen(), NativeSupport.utf8(filter)));
     }
 
     // =========================================================================
@@ -208,7 +235,7 @@ public class Collection implements AutoCloseable {
         PointerPointer results = new PointerPointer(1);
         SizeTPointer count = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_query(handle, query.getHandle(), results, count));
+                ZvecNative.zvec_collection_query(requireOpen(), query.getHandle(), results, count));
         return readDocArray(results, count);
     }
 
@@ -217,7 +244,7 @@ public class Collection implements AutoCloseable {
         PointerPointer results = new PointerPointer(1);
         SizeTPointer count = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_multi_query(handle, query.getHandle(), results, count));
+                ZvecNative.zvec_collection_multi_query(requireOpen(), query.getHandle(), results, count));
         return readDocArray(results, count);
     }
 
@@ -229,7 +256,7 @@ public class Collection implements AutoCloseable {
         PointerPointer docs = new PointerPointer(1);
         SizeTPointer foundCount = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_collection_fetch(handle, pkPtr, pkArray.length,
+                ZvecNative.zvec_collection_fetch(requireOpen(), pkPtr, pkArray.length,
                         null, 0, true, docs, foundCount));
         return readDocArray(docs, foundCount);
     }
@@ -252,7 +279,7 @@ public class Collection implements AutoCloseable {
     public DocIterator createIterator(IteratorOptions options) {
         PointerPointer iterRef = new PointerPointer(1);
         ZvecException.throwIfError(ZvecNative.zvec_collection_create_iterator(
-                handle, (options != null) ? options.getHandle() : null, iterRef));
+                requireOpen(), (options != null) ? options.getHandle() : null, iterRef));
         return new DocIterator(new zvec_doc_iterator_t(iterRef.get(0)));
     }
 

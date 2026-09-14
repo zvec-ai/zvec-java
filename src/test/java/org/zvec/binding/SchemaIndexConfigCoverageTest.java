@@ -224,8 +224,15 @@ class SchemaIndexConfigCoverageTest extends TestSupport {
     // ---------------------------------------------------------------- Exceptions
 
     @Test
-    void testOpenNonExistentThrows() {
-        assertThrows(ZvecException.class, () -> Zvec.open("/no/such/zvec/collection/xyz", null));
+    void testOpenNonExistentThrowsWithNativeMessage() {
+        ZvecException ex = assertThrows(ZvecException.class,
+                () -> Zvec.open("/no/such/zvec/collection/xyz", null));
+        String code = ex.getErrorCode().toString();
+        assertTrue(ex.getMessage().startsWith(code), ex.getMessage());
+        // A bare error code is not actionable: the native layer records why the
+        // open failed, and the exception has to carry that along.
+        assertTrue(ex.getMessage().length() > code.length(),
+                "expected a native message after the error code, got: " + ex.getMessage());
     }
 
     @Test
@@ -236,5 +243,15 @@ class SchemaIndexConfigCoverageTest extends TestSupport {
         assertFalse(ex.isNotFound());
         assertEquals(ErrorCode.NOT_FOUND, ErrorCode.fromCode(1));
         assertEquals(ErrorCode.ALREADY_EXISTS, ErrorCode.fromCode(2));
+    }
+
+    @Test
+    void testExceptionMessageFormatting() {
+        assertEquals("InvalidArgument(3): bad arg", new ZvecException(3, "bad arg").getMessage());
+        assertEquals("NotFound(1)", new ZvecException(ErrorCode.NOT_FOUND).getMessage());
+        assertEquals("NotFound(1)", new ZvecException(ErrorCode.NOT_FOUND, "").getMessage());
+        assertEquals("Unknown(10)", new ZvecException(ErrorCode.UNKNOWN, null).getMessage());
+        assertEquals(ErrorCode.INTERNAL_ERROR,
+                new ZvecException(ErrorCode.INTERNAL_ERROR, "boom").getErrorCode());
     }
 }

@@ -189,4 +189,34 @@ class CollectionQueryCoverageTest extends TestSupport {
             }
         }
     }
+
+    @Test
+    void testClosedCollectionRejectsOperations(@TempDir Path dir) {
+        Collection coll = openIndexed(dir, "closed_guard");
+        assertTrue(coll.isOpen());
+        coll.close();
+        assertFalse(coll.isOpen(), "isOpen() must report a closed collection");
+
+        // A released handle has to surface as an exception; letting it reach the
+        // native layer turns a programming error into a JVM crash.
+        ZvecException flush = assertThrows(ZvecException.class, coll::flush);
+        assertEquals(ErrorCode.FAILED_PRECONDITION, flush.getErrorCode());
+        assertTrue(flush.getMessage().contains("closed"), flush.getMessage());
+
+        assertThrows(ZvecException.class, coll::optimize);
+        assertThrows(ZvecException.class, coll::getStats);
+        assertThrows(ZvecException.class, coll::getSchema);
+        assertThrows(ZvecException.class, () -> coll.deleteByFilter("num > 0"));
+        assertThrows(ZvecException.class, () -> coll.createIterator(null));
+        try (VectorQuery vq = new VectorQuery()) {
+            vq.setFieldName("vec");
+            vq.setTopK(1);
+            vq.setQueryVector(vecOf(1));
+            assertThrows(ZvecException.class, () -> coll.query(vq));
+        }
+
+        // close() and destroy() stay idempotent once the handle is gone.
+        coll.close();
+        coll.destroy();
+    }
 }

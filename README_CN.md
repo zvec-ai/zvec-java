@@ -20,7 +20,7 @@
 - **Jieba 全文索引开箱即用**:JAR 内置 cppjieba 词表(`jieba.dict.utf8` + `hmm_model.utf8`,位于 `zvec/jieba_dict/`),`Zvec.initialize()` 时自动注册,`jieba` 分词器无需任何额外配置
 - **多种数据类型**:支持 30 余种字段类型,包括各维度稀疏/稠密向量
 - **Java 8+**:最低兼容 Java 8
-- **120 个单元测试**:全部通过;关键 DML/DQL 采用强断言(topK 数量/score 排序/PK 命中、update 回读、delete 移除校验)。涉及平台受限索引的用例在 zvec 未编译该索引的平台上自动跳过
+- **122 个单元测试**:全部通过;关键 DML/DQL 采用强断言(topK 数量/score 排序/PK 命中、update 回读、delete 移除校验)。涉及平台受限索引的用例在 zvec 未编译该索引的平台上自动跳过
 
 ## 安装
 
