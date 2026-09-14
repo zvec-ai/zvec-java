@@ -57,10 +57,22 @@ find_platform_src() {
   return 1
 }
 
+# These JARs are built with the `jar` tool rather than by maven-jar-plugin, so
+# they get no manifest unless we write one. Mirror the entries the plugin puts
+# in the main artifact (see pom.xml) - a platform classifier has to be a
+# drop-in replacement for it, automatic module name included.
+manifest="$(mktemp)"
+cat > "$manifest" <<MANIFEST
+Automatic-Module-Name: org.zvec.binding
+Implementation-Title: zvec-java
+Implementation-Version: $VERSION
+Implementation-Vendor: zvec-ai
+MANIFEST
+
 # Base staging tree: compiled classes + bundled resources (jieba dict), with
 # every platform's native directory removed (both known layouts).
 base_stage="$(mktemp -d)"
-trap 'rm -rf "$base_stage"' EXIT
+trap 'rm -rf "$base_stage" "$manifest"' EXIT
 cp -R "$CLASSES_DIR/." "$base_stage/"
 for p in $PLATFORMS; do
   rm -rf "$base_stage/$p" "$base_stage/$PKG/$p"
@@ -73,7 +85,7 @@ if find "$base_stage" \( -name '*.so' -o -name '*.dylib' -o -name '*.dll' \) -pr
 fi
 
 nolib_jar="$TARGET_DIR/zvec-java-$VERSION-nolib.jar"
-(cd "$base_stage" && jar cf "$PROJECT_DIR/$nolib_jar" .)
+(cd "$base_stage" && jar cfm "$PROJECT_DIR/$nolib_jar" "$manifest" .)
 echo "built $nolib_jar (no native libraries)"
 
 missing=""
@@ -88,7 +100,7 @@ for p in $PLATFORMS; do
   mkdir -p "$stage/$PKG/$p"
   cp -R "$src/." "$stage/$PKG/$p/"
   out="$TARGET_DIR/zvec-java-$VERSION-$p.jar"
-  (cd "$stage" && jar cf "$PROJECT_DIR/$out" .)
+  (cd "$stage" && jar cfm "$PROJECT_DIR/$out" "$manifest" .)
   rm -rf "$stage"
   echo "built $out (natives from $src)"
 done

@@ -45,6 +45,9 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
 - `scripts/smoke-test.sh`: loads a built JAR exactly as a consumer does —
   natives out of the JAR, dictionary extraction, collection create/insert/flush,
   vector search and jieba full-text search — needing nothing but a JDK.
+- Every JAR declares `Automatic-Module-Name: org.zvec.binding` and its
+  `Implementation-*` coordinates, and carries `LICENSE` plus `NOTICE` under
+  `META-INF/`.
 
 ### CI / release automation
 
