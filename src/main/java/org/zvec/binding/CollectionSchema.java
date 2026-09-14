@@ -2,7 +2,6 @@ package org.zvec.binding;
 
 import org.zvec.binding.ZvecNative.zvec_collection_schema_t;
 import org.zvec.binding.ZvecNative.zvec_field_schema_t;
-import org.bytedeco.javacpp.Pointer;
 import org.bytedeco.javacpp.PointerPointer;
 import org.bytedeco.javacpp.SizeTPointer;
 

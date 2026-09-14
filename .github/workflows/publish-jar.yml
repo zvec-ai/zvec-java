@@ -51,6 +51,8 @@ jobs:
     # 23.10+, Debian 13 and Fedora 38+ can satisfy. macOS and Windows need no
     # container: macos-15 and windows-2025 are exactly what upstream builds on.
     container: ${{ matrix.container || null }}
+    # Longest observed leg is windows-x64 at ~1h11m.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -162,7 +164,7 @@ jobs:
       # --- Windows build toolchain ---
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1 (pinned by SHA; what it builds feeds the cache the publishing job reuses)
 
       - name: Install CMake and Ninja (Windows)
         if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
@@ -321,6 +323,7 @@ jobs:
     # the build-natives linux leg - otherwise the shipped .so files demand
     # GLIBC_2.38 and refuse to load on CentOS 8 / RHEL 8 / Ubuntu 20.04.
     container: 'quay.io/pypa/manylinux_2_28_x86_64:2026.03.01-1'
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -700,6 +703,7 @@ jobs:
     needs: build-jar
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

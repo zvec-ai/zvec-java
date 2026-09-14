@@ -11,6 +11,13 @@ src/main/java/org/zvec/binding/ZvecNative.java
 *.dll
 *.jnilib
 
+# Native bundles staged for the multi-platform JAR. The publish-jar workflow
+# drops every platform's libraries under src/main/resources/org/zvec/binding/
+# before running `mvn package`; the shared libraries are already covered by the
+# patterns above, but a Windows bundle also carries import libraries (.lib),
+# which would otherwise show up as untracked files after a local release build.
+src/main/resources/org/zvec/binding/*/
+
 # IDE
 .idea/
 *.iml

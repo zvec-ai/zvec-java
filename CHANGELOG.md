@@ -37,7 +37,7 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
   actionable `UnsatisfiedLinkError` when all three fail.
 - `ZvecException` messages carry the native error detail (code and text from
   `zvec_get_last_error_details`), so a failed call reports what zvec said
-  instead of only naming the error code.
+  instead of a bare error code.
 - `Collection` guards every native call with a use-after-close check and exposes
   `isOpen()`; `close()`/`destroy()` are safe to call from several threads.
 - Test suite of 122 tests, with strong assertions on the DML/DQL paths and
@@ -61,6 +61,9 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
 - Every shipped native library is scanned for the GPL-only RocksDB `range_tree`
   code so the Apache-2.0 licensing statement in the README stays true, and
   `NOTICE` is checked against the upstream `zvec/NOTICE` it reproduces.
+- A standalone `lint` job runs Checkstyle (`config/checkstyle.xml`) over the
+  hand-written sources, and every job declares an explicit `timeout-minutes`.
+- Third-party actions are pinned by commit SHA.
 
 [Unreleased]: https://github.com/zvec-ai/zvec-java/compare/v0.7.0...HEAD
 [0.7.0]: https://github.com/zvec-ai/zvec-java/releases/tag/v0.7.0

@@ -22,11 +22,40 @@ permissions:
 
 jobs:
   # ===========================================================================
+  # Style: Checkstyle over the hand-written sources. Own job, not a step of the
+  # matrix legs - it needs neither the submodule nor a native build, so a
+  # violation surfaces in about a minute instead of after the 48-minute linux
+  # compile. `checkstyle:check` is a direct goal invocation and therefore does
+  # not trigger the generate-sources JavaCPP parser either.
+  # ===========================================================================
+  lint:
+    name: Checkstyle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+
+      - name: Run Checkstyle
+        run: mvn checkstyle:check -B
+
+  # ===========================================================================
   # Source Mode: Build zvec C library from submodule, then run full test suite
   # ===========================================================================
   source-test:
     name: Source (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
+    # Longest observed leg is the linux-x64 zvec build at ~48m; the ceiling
+    # exists to stop a hung toolchain from burning runner minutes for 6 hours.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -86,7 +115,7 @@ jobs:
       # --- Windows build tools ---
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1 (pinned by SHA; dependabot keeps it current)
 
       - name: Install CMake and Ninja (Windows)
         if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
@@ -189,18 +218,14 @@ jobs:
           mvn test "-Dzvec.lib.path=$libPath" -B
         shell: pwsh
 
-      # --- Check formatting (Unix only – no gofmt equivalent needed on Windows) ---
-      - name: Check Java formatting (Checkstyle)
-        if: runner.os != 'Windows'
-        run: mvn checkstyle:check -B
-        continue-on-error: true
-
   # ===========================================================================
   # Vendor Mode: Test with pre-built libraries shipped in lib/ directory
   # ===========================================================================
   vendor-test:
     name: Vendor (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
+    # No compilation: download the LFS libraries and run the suite.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

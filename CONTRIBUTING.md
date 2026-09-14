@@ -31,6 +31,7 @@ cd ../..
 # 2. Build and test the binding
 mvn test
 mvn package          # fat JAR with this platform's natives
+mvn checkstyle:check # style gate CI runs (rules: config/checkstyle.xml)
 ```
 
 Point Maven at an existing zvec checkout instead of the submodule with
@@ -39,6 +40,11 @@ Point Maven at an existing zvec checkout instead of the submodule with
 
 To check an already-built artifact the way a consumer resolves it, run
 `scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar` (needs a JDK only).
+
+Checkstyle is deliberately narrow — it only flags things that are actual bugs
+(a `switch` that falls through, `equals()` without `hashCode()`, a string
+compared with `==`, an unused import). Indentation and line length are left to
+your IDE, so do not "fix" formatting that the build does not complain about.
 
 ## How the binding is put together
 
@@ -82,9 +88,9 @@ To check an already-built artifact the way a consumer resolves it, run
 
 - Conventional commits (`feat:`, `fix:`, `ci:`, `docs:`, `test:`, `build:`);
   explain the *why* in the body.
-- CI must pass: the `source-test` matrix builds zvec from the submodule and the
-  `vendor-test` matrix builds against prebuilt libraries, each on macOS ARM64,
-  Linux x86_64 and Windows x86_64.
+- CI must pass: `lint` runs Checkstyle, the `source-test` matrix builds zvec
+  from the submodule and the `vendor-test` matrix builds against prebuilt
+  libraries, each on macOS ARM64, Linux x86_64 and Windows x86_64.
 - Keep both READMEs and the javadoc of anything public up to date — the javadoc
   JAR is published to Maven Central.
 
@@ -119,7 +125,7 @@ is that version without the leading `v` (`v0.7.0` → `0.7.0`).
    `thirdparty/protobuf/` build products, which must not be committed.
 2. Update `<version>` in `pom.xml`, the version strings in both READMEs, and
    regenerate `NOTICE` if needed.
-3. `mvn test` locally (120 tests) and push.
+3. `mvn test` locally (122 tests) and `mvn checkstyle:check`, then push.
 4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. This runs
    `release.yml`, which builds `zvec_c_api` for all four platforms, verifies the
    Linux glibc floor and the absence of GPL-only RocksDB code, and publishes a

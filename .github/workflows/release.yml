@@ -27,6 +27,8 @@ jobs:
     # distros - CentOS 8, RHEL 8, Ubuntu 20.04. On the bare ubuntu-24.04 runner
     # it links glibc 2.39 and ends up demanding GLIBC_2.38.
     container: ${{ matrix.container || null }}
+    # Longest observed leg is windows-x64 at ~1h11m.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -152,7 +154,7 @@ jobs:
       # --- Windows build tools ---
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1 (pinned by SHA; dependabot keeps it current)
 
       - name: Install CMake and Ninja (Windows)
         if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
@@ -433,6 +435,7 @@ jobs:
     name: Create Release
     needs: [ build-libs ]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -525,7 +528,7 @@ jobs:
         shell: bash
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3 (pinned by SHA; it publishes with contents:write)
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: "zvec-java ${{ steps.tag.outputs.tag }}"
