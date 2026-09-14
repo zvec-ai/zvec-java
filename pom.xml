@@ -101,6 +101,19 @@
             <resource>
                 <directory>src/main/resources</directory>
             </resource>
+            <!-- Carry the license and attribution notices inside every JAR we
+                 publish (Apache-2.0 4(d): the bundled natives are built from
+                 the zvec submodule, whose NOTICE ours reproduces verbatim).
+                 Declared as a resource rooted at the repository so each file
+                 exists exactly once and stays the source of truth. -->
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>META-INF</targetPath>
+                <includes>
+                    <include>LICENSE</include>
+                    <include>NOTICE</include>
+                </includes>
+            </resource>
             <!-- Bundle the cppjieba dictionary files from the zvec submodule
                  into the JAR (zvec/jieba_dict/). At runtime Zvec.initialize()
                  extracts them to a cache directory and registers the dir via

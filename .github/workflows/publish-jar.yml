@@ -574,6 +574,53 @@ jobs:
             fi
           done
 
+      - name: Verify NOTICE reproduces the upstream zvec attributions
+        shell: bash
+        run: |
+          # Apache-2.0 4(d): the JARs redistribute the zvec native library, so
+          # zvec's attribution notices have to travel with them, and our NOTICE
+          # reproduces zvec/NOTICE verbatim. This fails the moment a submodule
+          # bump adds a third-party component our NOTICE does not carry yet;
+          # regenerate NOTICE (our header + zvec/NOTICE) when it does.
+          MISSING=0
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            if ! grep -qF -- "$line" NOTICE; then
+              echo "::error::NOTICE is missing this upstream line: $line"
+              MISSING=1
+            fi
+          done < <(cat zvec/NOTICE)
+          if [ "$MISSING" != "0" ]; then
+            echo "::error::NOTICE is out of date with respect to zvec/NOTICE"
+            exit 1
+          fi
+          echo "NOTICE reproduces all $(grep -c '' zvec/NOTICE) lines of zvec/NOTICE"
+
+      - name: Verify the license metadata is inside every JAR
+        shell: bash
+        run: |
+          # The pom declares LICENSE and NOTICE as resources under META-INF, so
+          # they ship in the main JAR and - because package-platform-jars.sh
+          # stages the whole classes tree - in every classifier JAR and in the
+          # nolib JAR built during the deploy step.
+          CHECKED=0
+          for j in target/zvec-java-*.jar; do
+            [ -e "$j" ] || continue
+            ENTRIES=$(jar tf "$j")
+            for f in META-INF/LICENSE META-INF/NOTICE; do
+              if ! echo "$ENTRIES" | grep -qx -- "$f"; then
+                echo "::error::$j is missing $f"
+                exit 1
+              fi
+            done
+            CHECKED=$((CHECKED + 1))
+            echo "$j: META-INF/LICENSE + META-INF/NOTICE present"
+          done
+          if [ "$CHECKED" = "0" ]; then
+            echo "::error::no JAR found under target/ - nothing was license-checked"
+            exit 1
+          fi
+
       - name: Upload JAR artifacts
         uses: actions/upload-artifact@v7
         with:

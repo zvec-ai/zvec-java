@@ -225,6 +225,13 @@ jobs:
           cp zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/hmm_model.utf8 staging/data/jieba_dict/
           echo "✓ Copied jieba dict"
 
+          # Apache-2.0 4(d): this archive redistributes the zvec library and the
+          # cppjieba dictionary, so it carries zvec's own license and attribution
+          # notices along with them.
+          cp zvec/LICENSE staging/LICENSE
+          cp zvec/NOTICE staging/NOTICE
+          echo "✓ Copied LICENSE + NOTICE"
+
           ls -la staging/$PLATFORM/
           du -h staging/$PLATFORM/${{ matrix.lib_name }}
         shell: bash
@@ -294,6 +301,11 @@ jobs:
           Copy-Item "zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/jieba.dict.utf8" "staging/data/jieba_dict/"
           Copy-Item "zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/hmm_model.utf8" "staging/data/jieba_dict/"
           Write-Host "✓ Copied jieba dict"
+
+          # Apache-2.0 4(d): carry zvec's license and attribution notices.
+          Copy-Item "zvec/LICENSE" "staging/LICENSE"
+          Copy-Item "zvec/NOTICE" "staging/NOTICE"
+          Write-Host "✓ Copied LICENSE + NOTICE"
 
           Get-ChildItem "staging/$platform/"
         shell: pwsh
