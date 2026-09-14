@@ -403,7 +403,14 @@ jobs:
           Compress-Archive -Path * -DestinationPath ..\${{ matrix.artifact_name }}.zip
           cd ..
           $hash = (Get-FileHash "${{ matrix.artifact_name }}.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  ${{ matrix.artifact_name }}.zip" | Out-File -Encoding ascii "${{ matrix.artifact_name }}.zip.sha256"
+          # Not Out-File, and not Set-Content without -NoNewline: on Windows
+          # both terminate the line with CRLF, so `sha256sum -c` reads the file
+          # name as "<archive>.zip\r" and reports "FAILED open or read" on the
+          # Linux and macOS machines consumers verify on. Write the exact bytes
+          # sha256sum produces for the other three platforms: hash, two spaces,
+          # name, LF.
+          $archive = "${{ matrix.artifact_name }}.zip"
+          Set-Content -Path "$archive.sha256" -Value "$hash  $archive`n" -NoNewline -Encoding ascii
           Write-Host "=== Archive ==="
           Get-ChildItem "${{ matrix.artifact_name }}.zip"
           Get-Content "${{ matrix.artifact_name }}.zip.sha256"
@@ -490,6 +497,7 @@ jobs:
           |----------|---------|--------------|
           | **macOS** | \`zvec-libs-darwin-arm64.tar.gz\` | Apple Silicon (arm64) |
           | **Linux** | \`zvec-libs-linux-x64.tar.gz\` | x86-64 |
+          | **Linux** | \`zvec-libs-linux-arm64.tar.gz\` | ARM64 (aarch64) |
           | **Windows** | \`zvec-libs-windows-x64.zip\` | x86-64 |
 
           ### Maven JAR
