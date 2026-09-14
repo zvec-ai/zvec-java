@@ -489,16 +489,20 @@ jobs:
             fi
           done
 
-      - name: Verify the linux natives stay glibc 2.28 compatible
+      - name: Verify the linux natives stay glibc 2.27 compatible
         shell: bash
         run: |
           # The linux libraries are built in manylinux_2_28 so they keep loading
-          # on CentOS 8 / RHEL 8 / Ubuntu 20.04. Building them on the bare
-          # runner instead links glibc 2.39 and produces a library that demands
-          # GLIBC_2.38 - loadable only on Ubuntu 23.10+, Debian 13 and Fedora
-          # 38+. Check the exact files every JAR variant packs: the main JAR,
-          # the per-platform classifier JARs and the shaded one.
-          LIMIT=2.28
+          # on old distros. Building them on the bare runner instead links glibc
+          # 2.39 and produces a library that demands GLIBC_2.38 - loadable only
+          # on Ubuntu 23.10+, Debian 13 and Fedora 38+. The README advertises a
+          # glibc 2.27 floor (Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+, Fedora
+          # 28+) and the manylinux_2_28 toolchain currently references symbols
+          # up to GLIBC_2.27 only, so pin exactly that: a future zvec bump that
+          # pulls in a 2.28 symbol fails here instead of silently invalidating
+          # the documented floor. Check the exact files every JAR variant packs:
+          # the main JAR, the per-platform classifier JARs and the shaded one.
+          LIMIT=2.27
           if ! command -v readelf >/dev/null 2>&1; then
             echo "::warning::readelf is unavailable, skipping the glibc floor check"
             exit 0
@@ -517,10 +521,57 @@ jobs:
               MAX=$(readelf -V "$so" 2>/dev/null | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sed 's/GLIBC_//' | sort -uV | tail -1)
               echo "$LIBDIR/$(basename "$so"): highest versioned GLIBC symbol = ${MAX:-none}"
               if [ -n "$MAX" ] && [ "$(printf '%s\n%s\n' "$MAX" "$LIMIT" | sort -V | tail -1)" != "$LIMIT" ]; then
-                echo "::error::$so requires GLIBC_$MAX but the floor is GLIBC_$LIMIT - it was not built inside a manylinux_2_28 container"
+                echo "::error::$so requires GLIBC_$MAX but the documented floor is GLIBC_$LIMIT - either it was not built inside a manylinux_2_28 container, or zvec started using a newer symbol (raise LIMIT and the README floor together)"
                 exit 1
               fi
             done
+          done
+
+      - name: Verify no GPL-only RocksDB code is linked into the shipped natives
+        shell: bash
+        run: |
+          # libzvec_c_api statically links RocksDB, which is dual-licensed
+          # Apache-2.0 / GPLv2 and is shipped here under Apache-2.0. The one
+          # GPL-exclusive part of RocksDB is the PerconaFT-derived range_tree
+          # lock manager (utilities/transactions/lock/range/). zvec never uses
+          # pessimistic transactions, so the linker drops those objects - the
+          # README says so, and this step is what keeps that statement true as
+          # zvec evolves. grep -a rather than strings/readelf/objdump: grep is
+          # present in every image we build in and works on ELF, Mach-O and PE
+          # alike, so all four platforms are covered by this x86_64 linux job.
+          GPL_PATTERN='range_tree|locktree|RangeTree|PessimisticTransaction|percona'
+          for LIBDIR in \
+            target/classes/org/zvec/binding/linux-x86_64 \
+            src/main/resources/org/zvec/binding/macosx-arm64 \
+            src/main/resources/org/zvec/binding/linux-arm64 \
+            src/main/resources/org/zvec/binding/windows-x86_64; do
+            if [ ! -d "$LIBDIR" ]; then
+              echo "::error::$LIBDIR is missing - nothing to license-check"
+              exit 1
+            fi
+            for lib in "$LIBDIR"/*.so "$LIBDIR"/*.dylib "$LIBDIR"/*.dll; do
+              [ -e "$lib" ] || continue
+              HITS=$(grep -a -i -c -E "$GPL_PATTERN" "$lib" || true)
+              echo "$lib: GPL-only RocksDB symbol hits = $HITS"
+              if [ "$HITS" != "0" ]; then
+                echo "::error::$lib links the GPL-only RocksDB range_tree code ($HITS hits) and cannot ship under Apache-2.0"
+                exit 1
+              fi
+            done
+            # Positive control: prove the scan really looked at the
+            # RocksDB-bearing runtime library, so a renamed, truncated or empty
+            # file cannot slip through as a clean result.
+            CORE=$(find "$LIBDIR" -maxdepth 1 -name '*zvec_c_api*' -print -quit)
+            if [ -z "$CORE" ]; then
+              echo "::error::no zvec_c_api library found under $LIBDIR"
+              exit 1
+            fi
+            ROCKS=$(grep -a -c -E 'rocksdb' "$CORE" || true)
+            echo "$CORE: rocksdb hits = $ROCKS (expected > 0)"
+            if [ "$ROCKS" -eq 0 ]; then
+              echo "::error::$CORE carries no RocksDB symbols - the scan is not looking at the real library"
+              exit 1
+            fi
           done
 
       - name: Upload JAR artifacts
@@ -591,7 +642,8 @@ jobs:
   # It runs inside manylinux_2_28 on both linux architectures rather than on a
   # bare runner, deliberately. The runners' own glibc 2.39 is newer than
   # anything the README claims to support, so a pass there would prove nothing;
-  # glibc 2.28 is the documented floor, and a .so linked against something
+  # this image's glibc 2.28 sits right next to the documented 2.27 floor (which
+  # build-jar enforces at the symbol level), and a .so linked against something
   # newer dies here with exactly the UnsatisfiedLinkError a consumer would hit.
   #
   # Linux only: macOS and Windows have no equivalent ABI floor to defend, and

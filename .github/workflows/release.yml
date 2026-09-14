@@ -229,16 +229,19 @@ jobs:
           du -h staging/$PLATFORM/${{ matrix.lib_name }}
         shell: bash
 
-      - name: Verify the linux library stays glibc 2.28 compatible
+      - name: Verify the linux library stays glibc 2.27 compatible
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          LIMIT=2.28
+          # The README advertises a glibc 2.27 floor (Ubuntu 18.04+, Debian 10+,
+          # RHEL/CentOS 8+, Fedora 28+) and the manylinux_2_28 toolchain only
+          # references symbols up to GLIBC_2.27 today, so pin exactly that.
+          LIMIT=2.27
           SO="staging/${{ matrix.platform }}/${{ matrix.lib_name }}"
           MAX=$(readelf -V "$SO" | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sed 's/GLIBC_//' | sort -uV | tail -1)
           echo "$SO: highest versioned GLIBC symbol = ${MAX:-none}"
           if [ -n "$MAX" ] && [ "$(printf '%s\n%s\n' "$MAX" "$LIMIT" | sort -V | tail -1)" != "$LIMIT" ]; then
-            echo "::error::$SO requires GLIBC_$MAX but the floor is GLIBC_$LIMIT - it was not built inside the manylinux_2_28 container"
+            echo "::error::$SO requires GLIBC_$MAX but the documented floor is GLIBC_$LIMIT - either it was not built inside the manylinux_2_28 container, or zvec started using a newer symbol (raise LIMIT and the README floor together)"
             exit 1
           fi
 
@@ -294,6 +297,40 @@ jobs:
 
           Get-ChildItem "staging/$platform/"
         shell: pwsh
+
+      # --- License guard ---
+      # The archives attached to the GitHub Release carry the same zvec_c_api
+      # binary as the Maven Central JARs, so they get the same check.
+      - name: Verify no GPL-only RocksDB code is linked into the library
+        shell: bash
+        run: |
+          # RocksDB is dual-licensed Apache-2.0 / GPLv2 and is shipped here under
+          # Apache-2.0. Its PerconaFT-derived range_tree lock manager
+          # (utilities/transactions/lock/range/) is the only GPL-exclusive part,
+          # and zvec never uses pessimistic transactions, so the linker drops
+          # those objects. grep -a rather than strings/readelf/objdump: grep is
+          # available on every runner (Git Bash on Windows) and works on ELF,
+          # Mach-O and PE alike.
+          SO="staging/${{ matrix.platform }}/${{ matrix.lib_name }}"
+          GPL_PATTERN='range_tree|locktree|RangeTree|PessimisticTransaction|percona'
+          if [ ! -f "$SO" ]; then
+            echo "::error::$SO is missing - nothing to license-check"
+            exit 1
+          fi
+          HITS=$(grep -a -i -c -E "$GPL_PATTERN" "$SO" || true)
+          echo "$SO: GPL-only RocksDB symbol hits = $HITS"
+          if [ "$HITS" != "0" ]; then
+            echo "::error::$SO links the GPL-only RocksDB range_tree code ($HITS hits) and cannot ship under Apache-2.0"
+            exit 1
+          fi
+          # Positive control: prove the scan really looked at the RocksDB-bearing
+          # runtime library, so a renamed or empty file cannot pass as clean.
+          ROCKS=$(grep -a -c -E 'rocksdb' "$SO" || true)
+          echo "$SO: rocksdb hits = $ROCKS (expected > 0)"
+          if [ "$ROCKS" -eq 0 ]; then
+            echo "::error::$SO carries no RocksDB symbols - the scan is not looking at the real library"
+            exit 1
+          fi
 
       # --- Verify Maven build compiles against staged vendor libs ---
       - name: Verify Maven compile with vendor libs (Unix)

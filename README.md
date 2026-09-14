@@ -383,14 +383,20 @@ This project is licensed under the **Apache License 2.0**, consistent with the m
 
 ### Third-party license notes
 
-- **JavaCPP** (`org.bytedeco:javacpp:1.5.11) is triple-licensed:
+- **JavaCPP** (`org.bytedeco:javacpp:1.5.11`) is triple-licensed:
   `Apache-2.0 OR GPL-2.0-or-later OR GPL-2.0-with-classpath-exception`.
   This project uses JavaCPP under the **Apache-2.0** terms.
 - **JUnit 5** is used only in the `test` scope and is licensed under the EPL-2.0.
   It is not included in the released JAR.
-- The native `zvec_c_api` library (built from the `zvec` submodule) may include
-  third-party code such as **RocksDB**. Some RocksDB components (for example the
-  PerconaFT-derived `range_tree` code under `utilities/transactions/lock/range/`)
-  are under GPL/AGPL-style licenses. Distributors of binary packages should
-  verify that the `zvec` core is built in a way that is compatible with their
-  desired license terms.
+- The native `zvec_c_api` library (built from the `zvec` submodule) statically
+  links **RocksDB**, which is dual-licensed under the Apache License 2.0 and the
+  GPLv2; it is used here under the **Apache-2.0** terms. The only GPL-exclusive
+  part of RocksDB is the PerconaFT-derived `range_tree` lock manager under
+  `utilities/transactions/lock/range/`, and zvec never uses pessimistic
+  transactions, so those objects are not linked into the released binaries. Both
+  release pipelines enforce that: every shipped native library is scanned for
+  `range_tree` / `locktree` / `PessimisticTransaction` symbols, and the build
+  fails if any of them show up.
+- The cppjieba dictionary bundled under `zvec/jieba_dict/` (`jieba.dict.utf8`,
+  `hmm_model.utf8`) comes from [cppjieba](https://github.com/yanyiwu/cppjieba)
+  and is licensed under the **MIT** license.

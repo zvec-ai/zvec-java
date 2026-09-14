@@ -347,6 +347,11 @@ Zvec C API 未提供文档级校验函数(`zvec_doc_validate` 不存在),该方�
   `Apache-2.0 或 GPL-2.0-or-later 或 GPL-2.0-with-classpath-exception`。
   本项目按 **Apache-2.0** 条款使用 JavaCPP。
 - **JUnit 5** 仅在 `test` scope 中使用,许可证为 EPL-2.0,不会被打入发布的 JAR。
-- 原生库 `zvec_c_api`(由 `zvec` 子模块构建)可能包含 **RocksDB** 等第三方代码。
-  RocksDB 的部分组件(例如源自 PerconaFT 的 `utilities/transactions/lock/range/range_tree/`)
-  采用 GPL/AGPL 类许可证。二进制分发方应确认 `zvec` 核心的构建方式与自身期望的许可证条款兼容。
+- 原生库 `zvec_c_api`(由 `zvec` 子模块构建)静态链接了 **RocksDB**;RocksDB 采用
+  Apache License 2.0 与 GPLv2 双重许可,本项目按 **Apache-2.0** 条款使用。RocksDB 中唯一
+  仅以 GPL 授权的部分是源自 PerconaFT 的 `range_tree` 锁管理器
+  (`utilities/transactions/lock/range/`),而 zvec 从不使用悲观事务,因此这些目标文件不会
+  被链接进发布的二进制。两条发布流水线都会强制校验这一点:每个待发布的原生库都会被扫描
+  `range_tree` / `locktree` / `PessimisticTransaction` 符号,一旦出现即构建失败。
+- 打包在 `zvec/jieba_dict/` 下的 cppjieba 词表(`jieba.dict.utf8`、`hmm_model.utf8`)
+  来自 [cppjieba](https://github.com/yanyiwu/cppjieba),采用 **MIT** 许可证。
