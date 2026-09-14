@@ -364,7 +364,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.2.4</version>
+                        <version>3.2.8</version>
                         <configuration>
                             <!-- Non-interactive passphrase entry for CI. -->
                             <gpgArguments>
