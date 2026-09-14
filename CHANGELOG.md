@@ -100,6 +100,17 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
 - `publish-jar.yml`: builds the JAR family inside `manylinux_2_28`, verifies the
   bundle, optionally deploys it to the Sonatype Central Portal, and smoke-tests
   the result on both Linux architectures before anyone clicks **Publish**.
+- Both release workflows check out the tag they were given. `actions/checkout`
+  without a `ref` resolves to the default branch on a `workflow_dispatch` run,
+  so a dispatch started after new commits landed on `main` used to build those
+  commits and label them with the tag's version.
+- The Windows archive's `.sha256` is written with LF, matching what `sha256sum`
+  produces for the other three platforms, so `sha256sum -c` verifies it on
+  Linux and macOS instead of failing on a trailing CR in the file name.
+- The `-sources` JAR carries sources. The publish pipeline stages every
+  platform's natives into `src/main/resources`, which the source plugin used to
+  sweep in along with the 5.6 MB dictionary — 44 MB of binaries that are
+  already inside the main and classifier JARs.
 - The Linux natives are checked against a `GLIBC_2.27` symbol floor, matching the
   distributions the README claims to support.
 - Every shipped native library is scanned for the GPL-only RocksDB `range_tree`

@@ -335,6 +335,17 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
                         <version>3.4.0</version>
+                        <configuration>
+                            <!-- The publish pipeline stages every platform's
+                                 natives into src/main/resources, and the
+                                 jieba dictionary is a resource as well. The
+                                 source plugin sweeps resource directories into
+                                 -sources.jar too, which would publish ~120 MB
+                                 of binaries that are already inside the main
+                                 and classifier JARs. A sources JAR should
+                                 carry sources. -->
+                            <excludeResources>true</excludeResources>
+                        </configuration>
                         <executions>
                             <execution>
                                 <id>attach-sources</id>
