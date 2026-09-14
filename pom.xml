@@ -39,7 +39,7 @@
 
     <scm>
         <connection>scm:git:https://github.com/zvec-ai/zvec-java.git</connection>
-        <developerConnection>scm:git:ssh://github.com:zvec-ai/zvec-java.git</developerConnection>
+        <developerConnection>scm:git:ssh://git@github.com/zvec-ai/zvec-java.git</developerConnection>
         <url>https://github.com/zvec-ai/zvec-java</url>
     </scm>
 
