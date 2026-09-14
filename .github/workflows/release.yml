@@ -260,61 +260,64 @@ jobs:
 
       - name: Package libraries (Windows)
         if: runner.os == 'Windows'
+        # bash rather than pwsh: the same library is resolved in bash by the
+        # Publish JAR workflow's "Resolve zvec lib directory" step, and Git Bash
+        # is present on every Windows runner (the license guard below already
+        # relies on it). One idiom for both workflows, and a failure here prints
+        # what is actually on disk - under pwsh the runner's
+        # ErrorActionPreference=stop made Write-Error end the step before the
+        # diagnostic listing could run, so the first failure said only
+        # "DLL not found".
+        shell: bash
         run: |
-          $platform = "${{ matrix.platform }}"
-          New-Item -ItemType Directory -Force -Path "staging/$platform"   | Out-Null
-          New-Item -ItemType Directory -Force -Path "staging/include/zvec" | Out-Null
+          PLATFORM="${{ matrix.platform }}"
+          mkdir -p "staging/$PLATFORM" staging/include/zvec
 
-          # Find DLL (location varies by CMake generator)
-          $dllCandidates = @(
-            "zvec/build/lib/Release/zvec_c_api.dll",
-            "zvec/build/lib/zvec_c_api.dll",
-            "zvec/build/bin/Release/zvec_c_api.dll"
-          )
-          $found = $false
-          foreach ($p in $dllCandidates) {
-            if (Test-Path $p) {
-              Copy-Item $p "staging/$platform/"
-              Write-Host "✓ Copied DLL from $p"
-              $found = $true; break
-            }
+          # zvec's CMake sends RUNTIME output (.dll plus executables) to
+          # build/bin and ARCHIVE/LIBRARY output (.lib, .so, .dylib) to
+          # build/lib - see zvec/cmake/bazel.cmake - while a Release/
+          # subdirectory only exists with a multi-config generator. This
+          # workflow builds with Ninja, so the DLL is in build/bin; search every
+          # layout anyway and match on a wildcard so a suffixed name resolves.
+          find_c_api() {
+            for d in zvec/build/bin zvec/build/bin/Release zvec/build/lib zvec/build/lib/Release; do
+              [ -d "$d" ] || continue
+              find "$d" -maxdepth 1 -type f -name "*zvec_c_api*$1" 2>/dev/null | head -n1
+            done
           }
-          if (-not $found) {
-            Write-Error "DLL not found"
-            Get-ChildItem -Recurse zvec/build/ -Filter *.dll
+
+          DLL=$(find_c_api .dll | head -n1)
+          if [ -z "$DLL" ]; then
+            echo "::error::zvec_c_api DLL not found under zvec/build"
+            find zvec/build \( -name '*.dll' -o -name '*.lib' \) -print 2>/dev/null | head -40
             exit 1
-          }
+          fi
+          cp "$DLL" "staging/$PLATFORM/"
+          echo "✓ Copied DLL from $DLL"
 
-          # Import library (.lib) – optional but useful for downstream C/C++ consumers
-          $libCandidates = @(
-            "zvec/build/lib/Release/zvec_c_api.lib",
-            "zvec/build/lib/zvec_c_api.lib"
-          )
-          foreach ($p in $libCandidates) {
-            if (Test-Path $p) {
-              Copy-Item $p "staging/$platform/"
-              Write-Host "✓ Copied import lib from $p"
-              break
-            }
-          }
+          # Import library (.lib) - optional but useful for downstream C/C++ consumers
+          LIB=$(find_c_api .lib | head -n1)
+          if [ -n "$LIB" ]; then
+            cp "$LIB" "staging/$PLATFORM/"
+            echo "✓ Copied import lib from $LIB"
+          fi
 
           # Public header
-          Copy-Item "zvec/src/include/zvec/c_api.h" "staging/include/zvec/"
-          Write-Host "✓ Copied c_api.h"
+          cp zvec/src/include/zvec/c_api.h staging/include/zvec/
+          echo "✓ Copied c_api.h"
 
           # Jieba dict (mirrors the zvec SDK layout data/jieba_dict)
-          New-Item -ItemType Directory -Force -Path "staging/data/jieba_dict" | Out-Null
-          Copy-Item "zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/jieba.dict.utf8" "staging/data/jieba_dict/"
-          Copy-Item "zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/hmm_model.utf8" "staging/data/jieba_dict/"
-          Write-Host "✓ Copied jieba dict"
+          mkdir -p staging/data/jieba_dict
+          cp zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/jieba.dict.utf8 staging/data/jieba_dict/
+          cp zvec/thirdparty/cppjieba/cppjieba-5.6.7/dict/hmm_model.utf8 staging/data/jieba_dict/
+          echo "✓ Copied jieba dict"
 
           # Apache-2.0 4(d): carry zvec's license and attribution notices.
-          Copy-Item "zvec/LICENSE" "staging/LICENSE"
-          Copy-Item "zvec/NOTICE" "staging/NOTICE"
-          Write-Host "✓ Copied LICENSE + NOTICE"
+          cp zvec/LICENSE staging/LICENSE
+          cp zvec/NOTICE staging/NOTICE
+          echo "✓ Copied LICENSE + NOTICE"
 
-          Get-ChildItem "staging/$platform/"
-        shell: pwsh
+          ls -la "staging/$PLATFORM/"
 
       # --- License guard ---
       # The archives attached to the GitHub Release carry the same zvec_c_api
