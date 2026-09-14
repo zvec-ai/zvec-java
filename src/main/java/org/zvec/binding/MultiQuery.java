@@ -57,9 +57,16 @@ public class MultiQuery implements AutoCloseable {
         return ZvecNative.zvec_multi_query_get_include_vector(handle);
     }
 
+    /**
+     * Set the scalar fields to return.
+     *
+     * @param fields field names; {@code null} returns all fields, an empty
+     *               array returns only the primary key / system columns
+     */
     public void setOutputFields(String[] fields) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_multi_query_set_output_fields(handle, NativeSupport.strArray(fields), fields.length));
+                ZvecNative.zvec_multi_query_set_output_fields(
+                        handle, NativeSupport.strArray(fields), NativeSupport.strArrayCount(fields)));
     }
 
     /** Enable reciprocal rank fusion (RRF) re-ranking. */

@@ -41,60 +41,77 @@ public class IvfRabitqQueryParams implements AutoCloseable {
     }
 
     /**
+     * The live native handle, or a {@link ZvecException} once ownership has been
+     * transferred to a query or the params have been closed. Without this guard
+     * the C API would receive a {@code NULL} handle and fail with a generic
+     * invalid-argument error that does not say what went wrong.
+     */
+    private zvec_ivf_rabitq_query_params_t requireLive() {
+        zvec_ivf_rabitq_query_params_t current = handle;
+        if (current == null || current.isNull()) {
+            throw new ZvecException(ErrorCode.FAILED_PRECONDITION,
+                    "params are closed or already owned by a query");
+        }
+        return current;
+    }
+
+    /**
      * Detach and return the native handle, transferring ownership to the
      * caller (the C query takes ownership of the params).
+     *
+     * @throws ZvecException when the handle has already been transferred
      */
     zvec_ivf_rabitq_query_params_t takeHandle() {
-        zvec_ivf_rabitq_query_params_t h = handle;
+        zvec_ivf_rabitq_query_params_t h = requireLive();
         handle = null;
         return h;
     }
 
     public void setNprobe(int nprobe) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_query_params_ivf_rabitq_set_nprobe(handle, nprobe));
+                ZvecNative.zvec_query_params_ivf_rabitq_set_nprobe(requireLive(), nprobe));
     }
 
     public int getNprobe() {
-        return ZvecNative.zvec_query_params_ivf_rabitq_get_nprobe(handle);
+        return ZvecNative.zvec_query_params_ivf_rabitq_get_nprobe(requireLive());
     }
 
     /** Set the candidate expansion factor used by the refiner. */
     public void setScaleFactor(float scaleFactor) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_query_params_ivf_rabitq_set_scale_factor(handle, scaleFactor));
+                ZvecNative.zvec_query_params_ivf_rabitq_set_scale_factor(requireLive(), scaleFactor));
     }
 
     /** Get the candidate expansion factor used by the refiner. */
     public float getScaleFactor() {
-        return ZvecNative.zvec_query_params_ivf_rabitq_get_scale_factor(handle);
+        return ZvecNative.zvec_query_params_ivf_rabitq_get_scale_factor(requireLive());
     }
 
     public void setRadius(float radius) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_query_params_ivf_rabitq_set_radius(handle, radius));
+                ZvecNative.zvec_query_params_ivf_rabitq_set_radius(requireLive(), radius));
     }
 
     public float getRadius() {
-        return ZvecNative.zvec_query_params_ivf_rabitq_get_radius(handle);
+        return ZvecNative.zvec_query_params_ivf_rabitq_get_radius(requireLive());
     }
 
     public void setIsLinear(boolean isLinear) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_query_params_ivf_rabitq_set_is_linear(handle, isLinear));
+                ZvecNative.zvec_query_params_ivf_rabitq_set_is_linear(requireLive(), isLinear));
     }
 
     public boolean getIsLinear() {
-        return ZvecNative.zvec_query_params_ivf_rabitq_get_is_linear(handle);
+        return ZvecNative.zvec_query_params_ivf_rabitq_get_is_linear(requireLive());
     }
 
     public void setIsUsingRefiner(boolean isUsingRefiner) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_query_params_ivf_rabitq_set_is_using_refiner(handle, isUsingRefiner));
+                ZvecNative.zvec_query_params_ivf_rabitq_set_is_using_refiner(requireLive(), isUsingRefiner));
     }
 
     public boolean getIsUsingRefiner() {
-        return ZvecNative.zvec_query_params_ivf_rabitq_get_is_using_refiner(handle);
+        return ZvecNative.zvec_query_params_ivf_rabitq_get_is_using_refiner(requireLive());
     }
 
     public void destroy() {

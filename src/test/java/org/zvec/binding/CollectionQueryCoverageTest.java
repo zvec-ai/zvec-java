@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -218,5 +219,82 @@ class CollectionQueryCoverageTest extends TestSupport {
         // close() and destroy() stay idempotent once the handle is gone.
         coll.close();
         coll.destroy();
+    }
+
+    @Test
+    void testQueryWithoutMatchesReturnsEmptyList(@TempDir Path dir) {
+        try (Collection coll = openIndexed(dir, "q_empty")) {
+            insertGraded(coll, 4);
+            coll.flush();
+
+            // A filter that matches nothing makes the C API allocate a
+            // zero-element result array; the wrapper still has to release it.
+            try (VectorQuery vq = new VectorQuery()) {
+                vq.setFieldName("vec");
+                vq.setTopK(4);
+                vq.setQueryVector(vecOf(0));
+                vq.setFilter("num >= 1000");
+                List<Doc> res = coll.query(vq);
+                assertNotNull(res);
+                assertTrue(res.isEmpty(), "no document matches the filter");
+            }
+
+            List<Doc> missing = coll.fetch(Collections.singletonList("does_not_exist"));
+            assertNotNull(missing);
+            assertTrue(missing.isEmpty(), "an unknown PK must not produce a document");
+        }
+    }
+
+    @Test
+    void testBatchWriteRejectsClosedDocument(@TempDir Path dir) {
+        try (Collection coll = openIndexed(dir, "closed_doc")) {
+            Doc closed = new Doc();
+            closed.setPK("gone");
+            closed.addVectorFP32Field("vec", vecOf(0));
+            closed.close();
+
+            // The C API dereferences every element of a write batch without a
+            // NULL check, so a closed document must be rejected in Java rather
+            // than handed down as a NULL pointer that crashes the JVM.
+            ZvecException insert = assertThrows(ZvecException.class,
+                    () -> coll.insert(Collections.singletonList(closed)));
+            assertEquals(ErrorCode.FAILED_PRECONDITION, insert.getErrorCode());
+            assertTrue(insert.getMessage().contains("closed"), insert.getMessage());
+
+            assertThrows(ZvecException.class, () -> coll.upsert(Collections.singletonList(closed)));
+            assertThrows(ZvecException.class, () -> coll.update(Collections.singletonList(closed)));
+
+            List<Doc> withNull = new ArrayList<>();
+            withNull.add(null);
+            ZvecException nullDoc = assertThrows(ZvecException.class, () -> coll.insert(withNull));
+            assertEquals(ErrorCode.INVALID_ARGUMENT, nullDoc.getErrorCode());
+        }
+    }
+
+    @Test
+    void testNullOutputFieldsReturnsEveryField(@TempDir Path dir) {
+        try (Collection coll = openIndexed(dir, "null_fields")) {
+            insertGraded(coll, 4);
+            coll.flush();
+
+            // A null list means "every field"; it used to throw a
+            // NullPointerException before the array was even built.
+            try (VectorQuery vq = new VectorQuery()) {
+                vq.setFieldName("vec");
+                vq.setTopK(1);
+                vq.setQueryVector(vecOf(1));
+                vq.setOutputFields(null);
+                List<Doc> res = coll.query(vq);
+                try {
+                    assertEquals(1, res.size());
+                    Doc hit = res.get(0);
+                    assertEquals("pk_1", hit.getPK());
+                    assertEquals("c1", hit.getStringField("cat"));
+                    assertEquals(1, hit.getInt32Field("num"));
+                } finally {
+                    Doc.freeDocs(res);
+                }
+            }
+        }
     }
 }

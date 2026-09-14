@@ -1,12 +1,7 @@
 package org.zvec.binding;
 
-import org.zvec.binding.ZvecNative.zvec_diskann_query_params_t;
-import org.zvec.binding.ZvecNative.zvec_flat_query_params_t;
 import org.zvec.binding.ZvecNative.zvec_group_by_vector_query_t;
-import org.zvec.binding.ZvecNative.zvec_hnsw_query_params_t;
-import org.zvec.binding.ZvecNative.zvec_ivf_query_params_t;
 import org.bytedeco.javacpp.FloatPointer;
-import org.bytedeco.javacpp.Pointer;
 
 /**
  * High-level wrapper for {@code zvec_group_by_vector_query_t}.
@@ -96,24 +91,40 @@ public class GroupByVectorQuery implements AutoCloseable {
         return ZvecNative.zvec_group_by_vector_query_get_include_vector(handle);
     }
 
+    /**
+     * Set the scalar fields to return.
+     *
+     * @param fields field names; {@code null} returns all fields, an empty
+     *               array returns only the primary key / system columns
+     */
     public void setOutputFields(String[] fields) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_group_by_vector_query_set_output_fields(handle, NativeSupport.strArray(fields), fields.length));
+                ZvecNative.zvec_group_by_vector_query_set_output_fields(
+                        handle, NativeSupport.strArray(fields), NativeSupport.strArrayCount(fields)));
     }
 
-    public void setHNSWParams(Pointer hnswParams) {
+    /** Set HNSW query parameters. Ownership transfers to this query. */
+    public void setHNSWParams(HnswQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_group_by_vector_query_set_hnsw_params(handle, new zvec_hnsw_query_params_t(hnswParams)));
+                ZvecNative.zvec_group_by_vector_query_set_hnsw_params(handle, params.takeHandle()));
     }
 
-    public void setIVFParams(Pointer ivfParams) {
+    /** Set IVF query parameters. Ownership transfers to this query. */
+    public void setIVFParams(IvfQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_group_by_vector_query_set_ivf_params(handle, new zvec_ivf_query_params_t(ivfParams)));
+                ZvecNative.zvec_group_by_vector_query_set_ivf_params(handle, params.takeHandle()));
     }
 
-    public void setFlatParams(Pointer flatParams) {
+    /** Set flat (brute-force) query parameters. Ownership transfers to this query. */
+    public void setFlatParams(FlatQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_group_by_vector_query_set_flat_params(handle, new zvec_flat_query_params_t(flatParams)));
+                ZvecNative.zvec_group_by_vector_query_set_flat_params(handle, params.takeHandle()));
+    }
+
+    /** Set Vamana query parameters. Ownership transfers to this query. */
+    public void setVamanaParams(VamanaQueryParams params) {
+        ZvecException.throwIfError(
+                ZvecNative.zvec_group_by_vector_query_set_vamana_params(handle, params.takeHandle()));
     }
 
     /**
@@ -132,11 +143,6 @@ public class GroupByVectorQuery implements AutoCloseable {
     public void setDiskAnnParams(DiskAnnQueryParams params) {
         ZvecException.throwIfError(
                 ZvecNative.zvec_group_by_vector_query_set_diskann_params(handle, params.takeHandle()));
-    }
-
-    public void setDiskAnnParams(Pointer diskAnnParams) {
-        ZvecException.throwIfError(
-                ZvecNative.zvec_group_by_vector_query_set_diskann_params(handle, new zvec_diskann_query_params_t(diskAnnParams)));
     }
 
     @Override

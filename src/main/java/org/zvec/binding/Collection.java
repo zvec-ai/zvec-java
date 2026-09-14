@@ -290,7 +290,15 @@ public class Collection implements AutoCloseable {
     private PointerPointer docHandles(List<Doc> docs) {
         Pointer[] handles = new Pointer[docs.size()];
         for (int i = 0; i < docs.size(); i++) {
-            handles[i] = docs.get(i).getHandle();
+            Doc doc = docs.get(i);
+            if (doc == null) {
+                throw new ZvecException(ErrorCode.INVALID_ARGUMENT,
+                        "document at index " + i + " is null");
+            }
+            // Validate before the call: the C API dereferences every element of
+            // a write batch without a NULL check, so a closed document here
+            // would crash the JVM instead of failing the write.
+            handles[i] = doc.requireOpen();
         }
         return new PointerPointer(handles);
     }
@@ -298,8 +306,11 @@ public class Collection implements AutoCloseable {
     private List<Doc> readDocArray(PointerPointer arrRef, SizeTPointer countRef) {
         long count = countRef.get();
         List<Doc> result = new ArrayList<>((int) count);
+        if (arrRef == null || arrRef.isNull()) {
+            return result;
+        }
         // The array pointer was written back into arrRef itself (@ByPtrPtr).
-        if (count > 0 && arrRef != null && !arrRef.isNull()) {
+        if (count > 0) {
             arrRef.capacity(count);
             for (long i = 0; i < count; i++) {
                 Pointer docPtr = arrRef.get(i);
@@ -307,8 +318,11 @@ public class Collection implements AutoCloseable {
                     result.add(new Doc(new zvec_doc_t(docPtr), true));
                 }
             }
-            ZvecNative.zvec_free(arrRef);
         }
+        // Release the array on an empty result too: the C API malloc()s it
+        // unconditionally, and malloc(0) may hand back a non-NULL block that
+        // only free() can release.
+        ZvecNative.zvec_free(arrRef);
         return result;
     }
 }

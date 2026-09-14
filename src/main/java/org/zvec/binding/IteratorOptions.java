@@ -2,8 +2,6 @@ package org.zvec.binding;
 
 import org.zvec.binding.ZvecNative.zvec_iterator_options_t;
 
-import org.bytedeco.javacpp.PointerPointer;
-
 /**
  * Options for {@link Collection#createIterator(IteratorOptions)} (zvec &ge;
  * v0.7.0).
@@ -34,15 +32,9 @@ public class IteratorOptions implements AutoCloseable {
      *               array returns only the primary key / system columns
      */
     public void setOutputFields(String[] fields) {
-        if (fields == null) {
-            ZvecException.throwIfError(
-                    ZvecNative.zvec_iterator_options_set_output_fields(
-                            handle, (PointerPointer) null, 0L));
-        } else {
-            ZvecException.throwIfError(
-                    ZvecNative.zvec_iterator_options_set_output_fields(
-                            handle, NativeSupport.strArray(fields), (long) fields.length));
-        }
+        ZvecException.throwIfError(
+                ZvecNative.zvec_iterator_options_set_output_fields(
+                        handle, NativeSupport.strArray(fields), NativeSupport.strArrayCount(fields)));
     }
 
     /** Set whether to include vector fields in the returned documents. */

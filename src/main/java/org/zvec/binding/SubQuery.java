@@ -1,15 +1,8 @@
 package org.zvec.binding;
 
-import org.zvec.binding.ZvecNative.zvec_diskann_query_params_t;
-import org.zvec.binding.ZvecNative.zvec_flat_query_params_t;
-import org.zvec.binding.ZvecNative.zvec_fts_query_params_t;
-import org.zvec.binding.ZvecNative.zvec_hnsw_query_params_t;
-import org.zvec.binding.ZvecNative.zvec_ivf_query_params_t;
 import org.zvec.binding.ZvecNative.zvec_sub_query_t;
-import org.zvec.binding.ZvecNative.zvec_vamana_query_params_t;
 import org.bytedeco.javacpp.FloatPointer;
 import org.bytedeco.javacpp.IntPointer;
-import org.bytedeco.javacpp.Pointer;
 
 /**
  * High-level wrapper for {@code zvec_sub_query_t}.
@@ -82,44 +75,54 @@ public class SubQuery implements AutoCloseable {
                 ZvecNative.zvec_sub_query_set_sparse_values(handle, vals, values.length));
     }
 
-    public void setHNSWParams(Pointer hnswParams) {
+    /** Set HNSW query parameters. Ownership transfers to this sub-query. */
+    public void setHNSWParams(HnswQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_sub_query_set_hnsw_params(handle, new zvec_hnsw_query_params_t(hnswParams)));
+                ZvecNative.zvec_sub_query_set_hnsw_params(handle, params.takeHandle()));
     }
 
-    public void setIVFParams(Pointer ivfParams) {
+    /** Set IVF query parameters. Ownership transfers to this sub-query. */
+    public void setIVFParams(IvfQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_sub_query_set_ivf_params(handle, new zvec_ivf_query_params_t(ivfParams)));
+                ZvecNative.zvec_sub_query_set_ivf_params(handle, params.takeHandle()));
     }
 
-    public void setFlatParams(Pointer flatParams) {
+    /** Set flat (brute-force) query parameters. Ownership transfers to this sub-query. */
+    public void setFlatParams(FlatQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_sub_query_set_flat_params(handle, new zvec_flat_query_params_t(flatParams)));
+                ZvecNative.zvec_sub_query_set_flat_params(handle, params.takeHandle()));
     }
 
-    public void setVamanaParams(Pointer vamanaParams) {
+    /** Set Vamana query parameters. Ownership transfers to this sub-query. */
+    public void setVamanaParams(VamanaQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_sub_query_set_vamana_params(handle, new zvec_vamana_query_params_t(vamanaParams)));
+                ZvecNative.zvec_sub_query_set_vamana_params(handle, params.takeHandle()));
     }
 
-    public void setDiskAnnParams(DiskAnnQueryParams diskAnnParams) {
+    /**
+     * Set IVF RaBitQ query parameters (zvec &ge; v0.7.0). Ownership of the
+     * params transfers to this sub-query; the wrapper becomes inert.
+     */
+    public void setIvfRabitqParams(IvfRabitqQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_sub_query_set_diskann_params(handle, diskAnnParams.getHandle()));
+                ZvecNative.zvec_sub_query_set_ivf_rabitq_params(handle, params.takeHandle()));
     }
 
-    public void setDiskAnnParams(Pointer diskAnnParams) {
+    /**
+     * Set DiskANN query parameters (zvec &ge; v0.7.0). Ownership of the params
+     * transfers to this sub-query; the wrapper becomes inert. Passing the handle
+     * without transferring it would leave the query pointing at memory that
+     * {@link DiskAnnQueryParams#close()} frees.
+     */
+    public void setDiskAnnParams(DiskAnnQueryParams params) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_sub_query_set_diskann_params(handle, new zvec_diskann_query_params_t(diskAnnParams)));
+                ZvecNative.zvec_sub_query_set_diskann_params(handle, params.takeHandle()));
     }
 
+    /** Set FTS query parameters. Ownership transfers to this sub-query. */
     public void setFtsParams(FtsQueryParams ftsParams) {
         ZvecException.throwIfError(
                 ZvecNative.zvec_sub_query_set_fts_params(handle, ftsParams.takeHandle()));
-    }
-
-    public void setFtsParams(Pointer ftsParams) {
-        ZvecException.throwIfError(
-                ZvecNative.zvec_sub_query_set_fts_params(handle, new zvec_fts_query_params_t(ftsParams)));
     }
 
     public void setFts(FtsPayload fts) {

@@ -125,7 +125,7 @@ is that version without the leading `v` (`v0.7.0` → `0.7.0`).
    `thirdparty/protobuf/` build products, which must not be committed.
 2. Update `<version>` in `pom.xml`, the version strings in both READMEs, and
    regenerate `NOTICE` if needed.
-3. `mvn test` locally (122 tests) and `mvn checkstyle:check`, then push.
+3. `mvn test` locally (all tests green) and `mvn checkstyle:check`, then push.
 4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. This runs
    `release.yml`, which builds `zvec_c_api` for all four platforms, verifies the
    Linux glibc floor and the absence of GPL-only RocksDB code, and publishes a

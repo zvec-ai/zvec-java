@@ -9,7 +9,7 @@ import org.zvec.binding.ZvecNative.zvec_log_config_t;
  */
 public class LogConfig implements AutoCloseable {
 
-    zvec_log_config_t handle;
+    private zvec_log_config_t handle;
 
     private LogConfig(zvec_log_config_t handle) {
         this.handle = handle;
@@ -17,6 +17,17 @@ public class LogConfig implements AutoCloseable {
 
     zvec_log_config_t getHandle() {
         return handle;
+    }
+
+    /**
+     * Detach and return the native handle, transferring ownership to the caller.
+     * {@link ConfigData#setLogConfig(LogConfig)} hands it to the C config, which
+     * then owns it; {@link #close()} afterwards is a no-op.
+     */
+    zvec_log_config_t takeHandle() {
+        zvec_log_config_t h = handle;
+        handle = null;
+        return h;
     }
 
     // =========================================================================

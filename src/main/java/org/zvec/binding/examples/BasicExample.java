@@ -9,12 +9,21 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Basic example demonstrating the Zvec Java binding.
+ * Basic example demonstrating the Zvec Java binding: schema and index setup,
+ * insert, vector search, fetch, update, delete and stats.
  *
- * <p>Run with:
+ * <p>This class is the {@code Main-Class} of the shaded
+ * {@code zvec-java-<version>-with-dependencies.jar}, which bundles the natives
+ * for every supported platform, so the shortest way to run it is:
  * <pre>
- * java -Djna.library.path=../../zvec/build/lib -cp target/zvec-java-1.0.0.jar org.zvec.binding.examples.BasicExample
+ * mvn package
+ * java -jar target/zvec-java-&lt;version&gt;-with-dependencies.jar
  * </pre>
+ *
+ * <p>To search with your own {@code zvec_c_api} build instead of the bundled
+ * one, add {@code -Dzvec.native.path=/path/to/zvec/build/lib} (or export
+ * {@code ZVEC_NATIVE_PATH}); see {@link org.zvec.binding.NativeLoader} for the
+ * full resolution order.
  */
 public class BasicExample {
 
@@ -69,8 +78,19 @@ public class BasicExample {
         // =========================================================================
         // 3. Create and open collection
         // =========================================================================
-        Collection collection = Zvec.createAndOpen(dbPath, schema, null);
-        schema.close();
+        // try-with-resources releases the collection even when one of the steps
+        // below throws; this is the pattern application code should copy.
+        try (Collection collection = Zvec.createAndOpen(dbPath, schema, null)) {
+            schema.close();
+            run(collection);
+        }
+
+        Zvec.shutdown();
+        System.out.println("\nDone!");
+    }
+
+    /** Steps 4 to 10: insert, flush, query, fetch, update, delete and stats. */
+    private static void run(Collection collection) {
 
         // =========================================================================
         // 4. Insert documents
@@ -162,13 +182,6 @@ public class BasicExample {
         // =========================================================================
         CollectionStats stats = collection.getStats();
         System.out.println("\nCollection stats: " + stats);
-
-        // =========================================================================
-        // 11. Cleanup
-        // =========================================================================
-        collection.close();
-        Zvec.shutdown();
-        System.out.println("\nDone!");
     }
 
     private static float[] randVec(int dim) {
@@ -183,4 +196,3 @@ public class BasicExample {
         return v;
     }
 }
-

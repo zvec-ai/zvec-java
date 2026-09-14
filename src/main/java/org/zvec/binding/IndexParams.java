@@ -41,43 +41,75 @@ public class IndexParams implements AutoCloseable {
     // Factory methods
     // =========================================================================
 
-    public static IndexParams createHNSW(MetricType metricType, int m, int efConstruction) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.HNSW.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createHNSW");
-        IndexParams p = new IndexParams(ptr);
+    /** Initialization step applied to a freshly allocated native handle. */
+    private interface Initializer {
+        void initialize(zvec_index_params_t ptr);
+    }
+
+    /**
+     * Allocate the native params for {@code type} and run {@code initializer}
+     * against them. The handle is destroyed again when initialization fails, so
+     * a factory call that throws cannot leak native memory.
+     */
+    private static IndexParams create(IndexType type, String description, Initializer initializer) {
+        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(type.getCode());
+        if (ptr == null || ptr.isNull()) {
+            throw new ZvecException(ErrorCode.INTERNAL_ERROR, "failed to create " + description);
+        }
+        IndexParams params = new IndexParams(ptr);
+        try {
+            initializer.initialize(ptr);
+        } catch (RuntimeException e) {
+            params.destroy();
+            throw e;
+        }
+        return params;
+    }
+
+    private static void applyMetricType(zvec_index_params_t ptr, MetricType metricType) {
+        if (metricType == null) {
+            throw new ZvecException(ErrorCode.INVALID_ARGUMENT, "metric type cannot be null");
+        }
         ZvecException.throwIfError(
                 ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
+    }
+
+    private static void applyQuantizeType(zvec_index_params_t ptr, QuantizeType quantizeType) {
+        if (quantizeType == null) {
+            throw new ZvecException(ErrorCode.INVALID_ARGUMENT, "quantize type cannot be null");
+        }
         ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_hnsw_params(ptr, m, efConstruction));
-        return p;
+                ZvecNative.zvec_index_params_set_quantize_type(ptr, quantizeType.getCode()));
+    }
+
+    public static IndexParams createHNSW(MetricType metricType, int m, int efConstruction) {
+        return create(IndexType.HNSW, "HNSW index params", ptr -> {
+            applyMetricType(ptr, metricType);
+            ZvecException.throwIfError(
+                    ZvecNative.zvec_index_params_set_hnsw_params(ptr, m, efConstruction));
+        });
     }
 
     public static IndexParams createHNSWQuantized(MetricType metricType, int m,
                                                    int efConstruction, QuantizeType quantizeType) {
-        IndexParams p = createHNSW(metricType, m, efConstruction);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_quantize_type(p.handle, quantizeType.getCode()));
-        return p;
+        return create(IndexType.HNSW, "quantized HNSW index params", ptr -> {
+            applyMetricType(ptr, metricType);
+            ZvecException.throwIfError(
+                    ZvecNative.zvec_index_params_set_hnsw_params(ptr, m, efConstruction));
+            applyQuantizeType(ptr, quantizeType);
+        });
     }
 
     public static IndexParams createIVF(MetricType metricType, int nList, int nIters, boolean useSoar) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.IVF.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createIVF");
-        IndexParams p = new IndexParams(ptr);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_ivf_params(ptr, nList, nIters, useSoar));
-        return p;
+        return create(IndexType.IVF, "IVF index params", ptr -> {
+            applyMetricType(ptr, metricType);
+            ZvecException.throwIfError(
+                    ZvecNative.zvec_index_params_set_ivf_params(ptr, nList, nIters, useSoar));
+        });
     }
 
     public static IndexParams createFlat(MetricType metricType) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.FLAT.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createFlat");
-        IndexParams p = new IndexParams(ptr);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
-        return p;
+        return create(IndexType.FLAT, "flat index params", ptr -> applyMetricType(ptr, metricType));
     }
 
     /**
@@ -90,23 +122,22 @@ public class IndexParams implements AutoCloseable {
      */
     public static IndexParams createDiskAnn(MetricType metricType, int maxDegree,
                                             int listSize, int pqChunkNum) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.DISKANN.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createDiskAnn");
-        IndexParams p = new IndexParams(ptr);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_diskann_params(ptr, maxDegree, listSize, pqChunkNum));
-        return p;
+        return create(IndexType.DISKANN, "DiskANN index params", ptr -> {
+            applyMetricType(ptr, metricType);
+            ZvecException.throwIfError(
+                    ZvecNative.zvec_index_params_set_diskann_params(ptr, maxDegree, listSize, pqChunkNum));
+        });
     }
 
     public static IndexParams createDiskAnnQuantized(MetricType metricType, int maxDegree,
                                                      int listSize, int pqChunkNum,
                                                      QuantizeType quantizeType) {
-        IndexParams p = createDiskAnn(metricType, maxDegree, listSize, pqChunkNum);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_quantize_type(p.handle, quantizeType.getCode()));
-        return p;
+        return create(IndexType.DISKANN, "quantized DiskANN index params", ptr -> {
+            applyMetricType(ptr, metricType);
+            ZvecException.throwIfError(
+                    ZvecNative.zvec_index_params_set_diskann_params(ptr, maxDegree, listSize, pqChunkNum));
+            applyQuantizeType(ptr, quantizeType);
+        });
     }
 
     /**
@@ -119,14 +150,11 @@ public class IndexParams implements AutoCloseable {
      */
     public static IndexParams createIvfRabitq(MetricType metricType, int nlist,
                                               int totalBits, int sampleCount) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.IVF_RABITQ.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createIvfRabitq");
-        IndexParams p = new IndexParams(ptr);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_ivf_rabitq_params(ptr, nlist, totalBits, sampleCount));
-        return p;
+        return create(IndexType.IVF_RABITQ, "IVF RaBitQ index params", ptr -> {
+            applyMetricType(ptr, metricType);
+            ZvecException.throwIfError(
+                    ZvecNative.zvec_index_params_set_ivf_rabitq_params(ptr, nlist, totalBits, sampleCount));
+        });
     }
 
     /**
@@ -142,24 +170,19 @@ public class IndexParams implements AutoCloseable {
     public static IndexParams createVamana(MetricType metricType, int maxDegree,
                                            int searchListSize, float alpha,
                                            boolean saturateGraph, boolean useContiguousMemory) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.VAMANA.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createVamana");
-        IndexParams p = new IndexParams(ptr);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_metric_type(ptr, metricType.getCode()));
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_vamana_params(
-                        ptr, maxDegree, searchListSize, alpha, saturateGraph, useContiguousMemory));
-        return p;
+        return create(IndexType.VAMANA, "Vamana index params", ptr -> {
+            applyMetricType(ptr, metricType);
+            ZvecException.throwIfError(
+                    ZvecNative.zvec_index_params_set_vamana_params(
+                            ptr, maxDegree, searchListSize, alpha, saturateGraph, useContiguousMemory));
+        });
     }
 
     public static IndexParams createInvert(boolean enableRangeOpt, boolean enableWildcard) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.INVERT.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createInvert");
-        IndexParams p = new IndexParams(ptr);
-        ZvecException.throwIfError(
-                ZvecNative.zvec_index_params_set_invert_params(ptr, enableRangeOpt, enableWildcard));
-        return p;
+        return create(IndexType.INVERT, "inverted index params", ptr ->
+                ZvecException.throwIfError(
+                        ZvecNative.zvec_index_params_set_invert_params(
+                                ptr, enableRangeOpt, enableWildcard)));
     }
 
     /**
@@ -170,31 +193,29 @@ public class IndexParams implements AutoCloseable {
      * @param extraParams   optional extra params JSON (may be null)
      */
     public static IndexParams createFTS(String tokenizerName, String[] filters, String extraParams) {
-        zvec_index_params_t ptr = ZvecNative.zvec_index_params_create(IndexType.FTS.getCode());
-        if (ptr == null || ptr.isNull()) throw new ZvecException(ErrorCode.INTERNAL_ERROR, "createFTS");
-        IndexParams p = new IndexParams(ptr);
-
-        zvec_string_array_t filtersArray = null;
-        BytePointer tokenizerPtr = null;
-        BytePointer extraParamsPtr = null;
-        try {
-            filtersArray = NativeSupport.stringArray(filters);
-            tokenizerPtr = NativeSupport.utf8(tokenizerName);
-            extraParamsPtr = NativeSupport.utf8(extraParams);
-            ZvecException.throwIfError(
-                    ZvecNative.zvec_index_params_set_fts_params(ptr, tokenizerPtr, filtersArray, extraParamsPtr));
-        } finally {
-            if (tokenizerPtr != null) {
-                tokenizerPtr.close();
+        return create(IndexType.FTS, "FTS index params", ptr -> {
+            zvec_string_array_t filtersArray = null;
+            BytePointer tokenizerPtr = null;
+            BytePointer extraParamsPtr = null;
+            try {
+                filtersArray = NativeSupport.stringArray(filters);
+                tokenizerPtr = NativeSupport.utf8(tokenizerName);
+                extraParamsPtr = NativeSupport.utf8(extraParams);
+                ZvecException.throwIfError(
+                        ZvecNative.zvec_index_params_set_fts_params(
+                                ptr, tokenizerPtr, filtersArray, extraParamsPtr));
+            } finally {
+                if (tokenizerPtr != null) {
+                    tokenizerPtr.close();
+                }
+                if (filtersArray != null) {
+                    ZvecNative.zvec_string_array_destroy(filtersArray);
+                }
+                if (extraParamsPtr != null) {
+                    extraParamsPtr.close();
+                }
             }
-            if (filtersArray != null) {
-                ZvecNative.zvec_string_array_destroy(filtersArray);
-            }
-            if (extraParamsPtr != null) {
-                extraParamsPtr.close();
-            }
-        }
-        return p;
+        });
     }
 
     // =========================================================================

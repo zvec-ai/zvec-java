@@ -57,15 +57,29 @@ final class NativeSupport {
 
     /**
      * Build a native {@code const char**} array of NUL-terminated UTF-8 copies of
-     * {@code items}. The returned {@link PointerPointer} retains references to its
-     * element pointers so they stay alive for the duration of a native call.
+     * {@code items}, or {@code null} when {@code items} is {@code null}. The
+     * returned {@link PointerPointer} retains references to its element pointers
+     * so they stay alive for the duration of a native call.
+     *
+     * <p>Encoding is pinned to UTF-8: the {@code putString(String...)} overload
+     * without an explicit charset would use the platform default.
      */
     static PointerPointer strArray(String[] items) {
-        BytePointer[] elems = new BytePointer[items.length];
-        for (int i = 0; i < items.length; i++) {
-            elems[i] = utf8(items[i]);
+        if (items == null) {
+            return null;
         }
-        return new PointerPointer(elems);
+        return new PointerPointer<BytePointer>(items.length)
+                .putString(items, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Element count to pair with {@link #strArray}: {@code 0} for a null array.
+     * The output-field setters read a null array as "return every field", so a
+     * null argument has to reach the C API as a null pointer with a zero count
+     * rather than as an empty array.
+     */
+    static long strArrayCount(String[] items) {
+        return items == null ? 0L : items.length;
     }
 
     /**

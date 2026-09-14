@@ -35,7 +35,12 @@ public class FtsPayload implements AutoCloseable {
     }
 
     public void setQueryString(String queryString) {
-        ZvecException.throwIfError(ZvecNative.zvec_fts_set_query_string(handle, queryString));
+        // Marshal explicitly as UTF-8: the generated String overload goes
+        // through GetStringUTFChars(), i.e. modified UTF-8, which encodes
+        // astral characters (emoji, CJK extension B) as surrogate pairs the
+        // C++ tokenizer would reject.
+        ZvecException.throwIfError(
+                ZvecNative.zvec_fts_set_query_string(handle, NativeSupport.utf8(queryString)));
     }
 
     public String getQueryString() {
@@ -43,7 +48,8 @@ public class FtsPayload implements AutoCloseable {
     }
 
     public void setMatchString(String matchString) {
-        ZvecException.throwIfError(ZvecNative.zvec_fts_set_match_string(handle, matchString));
+        ZvecException.throwIfError(
+                ZvecNative.zvec_fts_set_match_string(handle, NativeSupport.utf8(matchString)));
     }
 
     public String getMatchString() {

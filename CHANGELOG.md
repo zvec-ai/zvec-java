@@ -24,6 +24,19 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
   the collection snapshot iterator (`Collection.createIterator`, `DocIterator`,
   `IteratorOptions`), and I/O backend introspection
   (`Zvec.getIoBackendType` and friends).
+- Typed query parameters for every index family — `FlatQueryParams`,
+  `HnswQueryParams`, `IvfQueryParams`, `IvfRabitqQueryParams`,
+  `DiskAnnQueryParams`, `VamanaQueryParams` and `FtsQueryParams` — accepted by
+  `VectorQuery`, `GroupByVectorQuery` and `SubQuery`, each defaulting to the
+  values the C API documents. They replace setters that took a raw `Pointer`,
+  which left the ownership transfer invisible at the call site, and close the
+  last coverage gaps: Vamana was missing from both vector queries and
+  IVF-RaBitQ from `SubQuery`.
+- `Doc.getBinaryField()`, completing a binary-field round trip that was
+  previously write-only.
+- `setOutputFields(null)` on `VectorQuery`, `MultiQuery` and
+  `GroupByVectorQuery` means "return every field", the way the C API reads a
+  null field list and the way `IteratorOptions` already behaved.
 - Artifact family following the `org.duckdb:duckdb_jdbc` layout: a main JAR with
   the natives for every supported platform, single-platform classifier JARs
   (`macosx-arm64`, `linux-x86_64`, `linux-arm64`, `windows-x86_64`), a `nolib`
@@ -38,9 +51,11 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
 - `ZvecException` messages carry the native error detail (code and text from
   `zvec_get_last_error_details`), so a failed call reports what zvec said
   instead of a bare error code.
-- `Collection` guards every native call with a use-after-close check and exposes
-  `isOpen()`; `close()`/`destroy()` are safe to call from several threads.
-- Test suite of 122 tests, with strong assertions on the DML/DQL paths and
+- `Collection` and `Doc` guard every native call with a use-after-close check
+  and expose `isOpen()`; `close()`/`destroy()` are safe to call from several
+  threads. Query parameters whose ownership has already transferred to a query
+  reject further use instead of passing a released handle to the C API.
+- Test suite of 139 tests, with strong assertions on the DML/DQL paths and
   `assumeTrue` skips for platform-gated indexes.
 - `scripts/smoke-test.sh`: loads a built JAR exactly as a consumer does —
   natives out of the JAR, dictionary extraction, collection create/insert/flush,
@@ -48,6 +63,35 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
 - Every JAR declares `Automatic-Module-Name: org.zvec.binding` and its
   `Implementation-*` coordinates, and carries `LICENSE` plus `NOTICE` under
   `META-INF/`.
+
+### Fixed
+
+- `Collection.query()` released the native result array only when the query
+  matched something. The C API `malloc()`s that array unconditionally and
+  `malloc(0)` may return a non-NULL block, so every empty result set leaked it.
+- `FtsPayload.setQueryString()` and `setMatchString()` were the last call sites
+  marshalling through the generated `String` overload, i.e. modified UTF-8,
+  which encodes astral characters (emoji, CJK extension B) as surrogate pairs
+  the C++ side cannot read back. Both now marshal as UTF-8 like the rest of the
+  binding.
+- The `IndexParams` factories leaked the freshly allocated native params when a
+  later initialization step failed, and reported such a failure as a bare method
+  name. Initialization errors now release the handle and name the offending
+  argument.
+- A closed `Doc` inside a write batch reached the C API as a NULL element, which
+  `convert_zvec_docs_to_internal()` dereferences without a check: the result was
+  a `SIGSEGV` that took the whole JVM down. `insert()`, `update()` and
+  `upsert()` now reject closed and null documents with a `ZvecException`.
+- `SubQuery.setDiskAnnParams()` passed a borrowed handle to a C call that takes
+  ownership, so the sub-query freed parameters its caller still held and a
+  later `close()` freed them again.
+- `ConfigData.setLogConfig()` leaked the native log configuration when
+  `zvec_config_data_set_log_config` rejected it: the C side only takes ownership
+  on success, so the failure path has to release it.
+- `NativeSupport.strArray()` threw on a null array and encoded its elements with
+  the platform default charset. It is now null-safe and pins UTF-8.
+- `CollectionStats` released the native stats object only after every getter had
+  succeeded, leaking it when one threw mid-construction.
 
 ### CI / release automation
 

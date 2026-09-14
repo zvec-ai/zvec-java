@@ -1,6 +1,7 @@
 package org.zvec.binding;
 
 import org.zvec.binding.ZvecNative.zvec_config_data_t;
+import org.zvec.binding.ZvecNative.zvec_log_config_t;
 
 /**
  * High-level wrapper for {@code zvec_config_data_t}.
@@ -60,10 +61,18 @@ public class ConfigData implements AutoCloseable {
      * do not destroy the LogConfig separately afterward.
      */
     public void setLogConfig(LogConfig logConfig) {
-        ZvecException.throwIfError(
-                ZvecNative.zvec_config_data_set_log_config(handle, logConfig.handle));
-        // Ownership transferred – prevent double-free.
-        logConfig.handle = null;
+        zvec_log_config_t logHandle = logConfig.takeHandle();
+        try {
+            ZvecException.throwIfError(
+                    ZvecNative.zvec_config_data_set_log_config(handle, logHandle));
+        } catch (RuntimeException e) {
+            // The C side only takes ownership on success, so a rejected call
+            // leaves the log config ours to release.
+            if (logHandle != null && !logHandle.isNull()) {
+                ZvecNative.zvec_config_log_destroy(logHandle);
+            }
+            throw e;
+        }
     }
 
     public int getLogType() {

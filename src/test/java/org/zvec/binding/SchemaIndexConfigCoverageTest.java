@@ -183,6 +183,25 @@ class SchemaIndexConfigCoverageTest extends TestSupport {
         }
     }
 
+    @Test
+    void testFactoryRejectsNullEnumArguments() {
+        // A rejected factory call must report which argument was wrong and must
+        // not leave the freshly allocated native params behind.
+        ZvecException metric = assertThrows(ZvecException.class,
+                () -> IndexParams.createHNSW(null, 16, 200));
+        assertEquals(ErrorCode.INVALID_ARGUMENT, metric.getErrorCode());
+        assertTrue(metric.getMessage().contains("metric"), metric.getMessage());
+
+        ZvecException quantize = assertThrows(ZvecException.class,
+                () -> IndexParams.createHNSWQuantized(MetricType.L2, 16, 200, null));
+        assertEquals(ErrorCode.INVALID_ARGUMENT, quantize.getErrorCode());
+        assertTrue(quantize.getMessage().contains("quantize"), quantize.getMessage());
+
+        assertThrows(ZvecException.class, () -> IndexParams.createFlat(null));
+        assertThrows(ZvecException.class, () -> IndexParams.createIVF(null, 8, 10, false));
+        assertThrows(ZvecException.class, () -> IndexParams.createIvfRabitq(null, 8, 32, 0));
+    }
+
     // ---------------------------------------------------------------- ConfigData
 
     @Test
@@ -194,6 +213,22 @@ class SchemaIndexConfigCoverageTest extends TestSupport {
             assertEquals(0.75f, cfg.getBruteForceByKeysRatio(), 1e-6);
             cfg.setOptimizeThreadCount(3);
             assertEquals(3, cfg.getOptimizeThreadCount());
+        }
+    }
+
+    @Test
+    void testSetLogConfigTransfersOwnership() {
+        try (ConfigData cfg = new ConfigData()) {
+            LogConfig lc = LogConfig.createFile(LogLevel.WARN, "/tmp/zveclog", "owned", 10, 7);
+            cfg.setLogConfig(lc);
+            assertEquals(1, cfg.getLogType(), "ZVEC_LOG_TYPE_FILE must be registered");
+
+            // The C config now owns the log config: the wrapper has to be inert,
+            // otherwise closing it would free memory the C side still points at.
+            assertNull(lc.getHandle());
+            lc.close();
+            lc.close();
+            assertEquals(1, cfg.getLogType());
         }
     }
 

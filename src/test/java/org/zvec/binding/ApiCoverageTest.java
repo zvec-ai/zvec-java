@@ -182,6 +182,170 @@ class ApiCoverageTest extends TestSupport {
     }
 
     @Test
+    void testTransferredIvfRabitqParamsRejectReuse() {
+        IvfRabitqQueryParams params = new IvfRabitqQueryParams();
+        try (VectorQuery vq = new VectorQuery()) {
+            vq.setIvfRabitqParams(params);
+            // Ownership moved to the query, so the wrapper must fail loudly
+            // instead of handing a NULL handle to the C API.
+            ZvecException ex = assertThrows(ZvecException.class, () -> params.setNprobe(8));
+            assertEquals(ErrorCode.FAILED_PRECONDITION, ex.getErrorCode());
+            assertThrows(ZvecException.class, params::getRadius);
+        }
+        params.close(); // documented no-op once ownership has transferred
+    }
+
+    @Test
+    void testTransferredDiskAnnParamsRejectReuse() {
+        DiskAnnQueryParams params = new DiskAnnQueryParams();
+        try (VectorQuery vq = new VectorQuery()) {
+            vq.setDiskAnnParams(params);
+            ZvecException ex = assertThrows(ZvecException.class, () -> params.setListSize(64));
+            assertEquals(ErrorCode.FAILED_PRECONDITION, ex.getErrorCode());
+            assertThrows(ZvecException.class, params::getRadius);
+        }
+        params.close();
+    }
+
+    @Test
+    void testHnswQueryParamsRoundtrip() {
+        try (HnswQueryParams p = new HnswQueryParams(64, 1.5f, false, true)) {
+            assertEquals(64, p.getEf());
+            assertEquals(1.5f, p.getRadius(), 1e-6);
+            assertFalse(p.getIsLinear());
+            assertTrue(p.getIsUsingRefiner());
+
+            p.setEf(128);
+            assertEquals(128, p.getEf());
+            p.setRadius(2.5f);
+            assertEquals(2.5f, p.getRadius(), 1e-6);
+            p.setIsLinear(true);
+            assertTrue(p.getIsLinear());
+        }
+    }
+
+    @Test
+    void testIvfQueryParamsRoundtrip() {
+        try (IvfQueryParams p = new IvfQueryParams(32, true, 5.0f)) {
+            assertEquals(32, p.getNprobe());
+            assertTrue(p.getIsUsingRefiner());
+            assertEquals(5.0f, p.getScaleFactor(), 1e-6);
+
+            p.setNprobe(64);
+            assertEquals(64, p.getNprobe());
+            p.setRadius(1.25f);
+            assertEquals(1.25f, p.getRadius(), 1e-6);
+            p.setIsLinear(true);
+            assertTrue(p.getIsLinear());
+        }
+    }
+
+    @Test
+    void testFlatQueryParamsRoundtrip() {
+        try (FlatQueryParams p = new FlatQueryParams(true, 4.0f)) {
+            assertTrue(p.getIsUsingRefiner());
+            assertEquals(4.0f, p.getScaleFactor(), 1e-6);
+
+            p.setRadius(0.5f);
+            assertEquals(0.5f, p.getRadius(), 1e-6);
+            p.setIsLinear(true);
+            assertTrue(p.getIsLinear());
+            p.setIsUsingRefiner(false);
+            assertFalse(p.getIsUsingRefiner());
+        }
+    }
+
+    @Test
+    void testVamanaQueryParamsRoundtrip() {
+        try (VamanaQueryParams p = new VamanaQueryParams(300, 2.0f, false, true)) {
+            assertEquals(300, p.getEfSearch());
+            assertEquals(2.0f, p.getRadius(), 1e-6);
+            assertFalse(p.getIsLinear());
+            assertTrue(p.getIsUsingRefiner());
+
+            p.setEfSearch(150);
+            assertEquals(150, p.getEfSearch());
+            p.setIsLinear(true);
+            assertTrue(p.getIsLinear());
+        }
+    }
+
+    @Test
+    void testQueryParamDefaultsMatchTheCApi() {
+        // The no-argument constructors hardcode the defaults documented in
+        // c_api.h; reading them back proves they still match the library.
+        try (HnswQueryParams hnsw = new HnswQueryParams();
+             IvfQueryParams ivf = new IvfQueryParams();
+             FlatQueryParams flat = new FlatQueryParams();
+             VamanaQueryParams vamana = new VamanaQueryParams()) {
+            assertEquals(40, hnsw.getEf());
+            assertEquals(0.0f, hnsw.getRadius(), 1e-6);
+            assertEquals(10, ivf.getNprobe());
+            assertEquals(10.0f, ivf.getScaleFactor(), 1e-6);
+            assertEquals(10.0f, flat.getScaleFactor(), 1e-6);
+            assertFalse(flat.getIsUsingRefiner());
+            assertEquals(200, vamana.getEfSearch());
+        }
+    }
+
+    @Test
+    void testTypedQueryParamsTransferOwnershipToVectorQuery(@TempDir Path dir) {
+        HnswQueryParams hnsw = new HnswQueryParams();
+        IvfQueryParams ivf = new IvfQueryParams();
+        FlatQueryParams flat = new FlatQueryParams();
+        VamanaQueryParams vamana = new VamanaQueryParams();
+        try (Collection coll = openIndexed(dir, "typed_params");
+             VectorQuery vq = new VectorQuery()) {
+            insertGraded(coll, 8);
+            coll.flush();
+
+            vq.setFieldName("vec");
+            vq.setTopK(2);
+            vq.setQueryVector(vecOf(3));
+            vq.setHNSWParams(hnsw);
+            assertNull(hnsw.getHandle(), "ownership must transfer to the query");
+
+            List<Doc> res = coll.query(vq);
+            try {
+                assertEquals(2, res.size());
+                assertEquals("pk_3", res.get(0).getPK());
+            } finally {
+                Doc.freeDocs(res);
+            }
+
+            // Each setter replaces the previous params, so the query owns them
+            // all in turn and none of the wrappers may free anything.
+            vq.setIVFParams(ivf);
+            vq.setFlatParams(flat);
+            vq.setVamanaParams(vamana);
+            assertNull(ivf.getHandle());
+            assertNull(flat.getHandle());
+            assertNull(vamana.getHandle());
+        }
+        hnsw.close();
+        ivf.close();
+        flat.close();
+        vamana.close();
+    }
+
+    @Test
+    void testSubQueryTypedParamsTransferOwnership() {
+        DiskAnnQueryParams diskAnn = new DiskAnnQueryParams(100);
+        IvfRabitqQueryParams rabitq = new IvfRabitqQueryParams();
+        try (SubQuery sq = new SubQuery()) {
+            sq.setFieldName("vec");
+            // Passing the handle without transferring it used to leave the
+            // sub-query pointing at memory the wrapper would then free.
+            sq.setDiskAnnParams(diskAnn);
+            assertNull(diskAnn.getHandle(), "ownership must transfer to the sub-query");
+            sq.setIvfRabitqParams(rabitq);
+            assertNull(rabitq.getHandle(), "ownership must transfer to the sub-query");
+        }
+        diskAnn.close();
+        rabitq.close();
+    }
+
+    @Test
     void testDiskAnnEndToEndQuery(@TempDir Path dir) {
         assumeTrue(isDiskAnnSupported(),
                 "zvec enables DiskANN only on Linux x86_64/aarch64 and macOS arm64");
@@ -244,6 +408,22 @@ class ApiCoverageTest extends TestSupport {
 
             fts.setMatchString("full text search");
             assertEquals("full text search", fts.getMatchString());
+        }
+    }
+
+    @Test
+    void testFtsPayloadKeepsNonBmpCharacters() {
+        // Marshalling through the generated String overload would use modified
+        // UTF-8, where an astral character becomes a surrogate pair the C++
+        // side cannot read back. The explicit UTF-8 path must round-trip it.
+        String match = "向量检索 \uD83D\uDE80 zvec";
+        String query = "title:\"中文标题\" AND tag:\uD83C\uDFF7";
+        try (FtsPayload fts = new FtsPayload()) {
+            fts.setMatchString(match);
+            assertEquals(match, fts.getMatchString());
+
+            fts.setQueryString(query);
+            assertEquals(query, fts.getQueryString());
         }
     }
 

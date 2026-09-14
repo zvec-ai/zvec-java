@@ -122,10 +122,23 @@ class DocCoverageTest extends TestSupport {
     }
 
     @Test
-    void testAddBinaryField() {
+    void testBinaryFieldRoundtrip() {
         try (Doc d = new Doc()) {
-            d.addBinaryField("blob", new byte[]{1, 2, 3, 4, 5});
+            byte[] blob = {1, 2, 3, 4, 5, 0, -1, 127};
+            d.addBinaryField("blob", blob);
             assertTrue(d.hasField("blob"));
+            assertArrayEquals(blob, d.getBinaryField("blob"),
+                    "binary data must survive the write/read round trip, including NUL bytes");
+        }
+    }
+
+    @Test
+    void testGetMissingBinaryFieldThrows() {
+        try (Doc d = new Doc()) {
+            // The C API rejects an unknown field with InvalidArgument rather
+            // than returning an empty buffer.
+            ZvecException ex = assertThrows(ZvecException.class, () -> d.getBinaryField("nope"));
+            assertEquals(ErrorCode.INVALID_ARGUMENT, ex.getErrorCode());
         }
     }
 
@@ -136,13 +149,6 @@ class DocCoverageTest extends TestSupport {
             d.addStringField("name", "向量数据库 Zvec 🚀");
             assertEquals("文档_甲", d.getPK());
             assertEquals("向量数据库 Zvec 🚀", d.getStringField("name"));
-        }
-    }
-
-    @Test
-    void testDocValidateUnsupported() {
-        try (Doc d = new Doc(); CollectionSchema s = new CollectionSchema("x")) {
-            assertThrows(UnsupportedOperationException.class, () -> d.validate(s, false));
         }
     }
 
@@ -172,6 +178,50 @@ class DocCoverageTest extends TestSupport {
                 assertEquals(123, d2.getInt32Field("num"));
                 assertEquals("hello", d2.getStringField("cat"));
             }
+        }
+    }
+
+    @Test
+    void testClosedDocRejectsOperations() {
+        Doc d = new Doc();
+        d.setPK("closed");
+        assertTrue(d.isOpen());
+        d.close();
+        assertFalse(d.isOpen(), "isOpen() must report a closed document");
+
+        // The C API treats a NULL document as a no-op, so a document reused
+        // after close() would silently discard writes. It has to throw instead.
+        ZvecException setPk = assertThrows(ZvecException.class, () -> d.setPK("again"));
+        assertEquals(ErrorCode.FAILED_PRECONDITION, setPk.getErrorCode());
+        assertTrue(setPk.getMessage().contains("closed"), setPk.getMessage());
+
+        assertThrows(ZvecException.class, () -> d.addInt32Field("num", 1));
+        assertThrows(ZvecException.class, () -> d.addStringField("cat", "x"));
+        assertThrows(ZvecException.class, d::getPK);
+        assertThrows(ZvecException.class, () -> d.getStringField("cat"));
+        assertThrows(ZvecException.class, d::getFieldNames);
+        assertThrows(ZvecException.class, d::memoryUsage);
+
+        try (Doc other = new Doc()) {
+            ZvecException merge = assertThrows(ZvecException.class, () -> other.merge(d));
+            assertEquals(ErrorCode.FAILED_PRECONDITION, merge.getErrorCode());
+        }
+
+        // close() stays idempotent once the handle is gone.
+        d.close();
+        Doc.freeDocs(java.util.Collections.singletonList(d));
+    }
+
+    @Test
+    void testNullArgumentsRejected() {
+        try (Doc d = new Doc()) {
+            // A NULL primary key is ignored by the C API and would only surface
+            // later as an opaque write failure.
+            ZvecException pk = assertThrows(ZvecException.class, () -> d.setPK(null));
+            assertEquals(ErrorCode.INVALID_ARGUMENT, pk.getErrorCode());
+
+            ZvecException merge = assertThrows(ZvecException.class, () -> d.merge(null));
+            assertEquals(ErrorCode.INVALID_ARGUMENT, merge.getErrorCode());
         }
     }
 }

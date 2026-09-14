@@ -209,8 +209,11 @@ zvec-java/
     │   ├── FieldSchema.java                         # Field schema definitions
     │   ├── Doc.java                                 # Document CRUD (read/write typed fields)
     │   ├── IndexParams.java                         # Index params (HNSW/IVF/Flat/Invert/Vamana/DiskANN/IVF-RaBitQ)
-    │   ├── VectorQuery.java / GroupByVectorQuery.java
-    │   ├── DiskAnnQueryParams.java / IvfRabitqQueryParams.java   # v0.7.0 query params
+    │   ├── VectorQuery.java / GroupByVectorQuery.java / MultiQuery.java / SubQuery.java
+    │   ├── FlatQueryParams.java / HnswQueryParams.java / IvfQueryParams.java /
+    │   │   IvfRabitqQueryParams.java / DiskAnnQueryParams.java /
+    │   │   VamanaQueryParams.java / FtsQueryParams.java  # typed query params, one per index family
+    │   ├── FtsPayload.java                          # jieba full-text search payload
     │   ├── DocIterator.java / IteratorOptions.java  # v0.7.0 collection iterator
     │   ├── IoBackendType.java                       # v0.7.0 I/O backend enum
     │   ├── JiebaDictSupport.java                    # Extracts the bundled jieba FTS dict

@@ -18,6 +18,11 @@ import java.util.List;
  *
  * <p>Documents are the fundamental unit of data.  Each document has a primary key
  * and a set of typed fields.  Use the typed add/get methods for convenient access.
+ *
+ * <p>After {@link #close()} every operation on this object throws a
+ * {@link ZvecException} with {@link ErrorCode#FAILED_PRECONDITION}. The C API
+ * treats a {@code NULL} document as a no-op, so without this guard a document
+ * reused after being closed would silently discard writes instead of failing.
  */
 public class Doc implements AutoCloseable {
 
@@ -36,8 +41,26 @@ public class Doc implements AutoCloseable {
         this.owned = owned;
     }
 
-    zvec_doc_t getHandle() {
-        return handle;
+    /**
+     * The live native handle, or a {@link ZvecException} when this document has
+     * already been closed. Keeps a released handle from reaching the native
+     * layer, where every {@code void} entry point would silently do nothing.
+     *
+     * <p>Package-private so that {@link Collection} can validate a batch of
+     * documents before handing them to the C API, which dereferences every
+     * element of a write batch without a NULL check.
+     */
+    zvec_doc_t requireOpen() {
+        zvec_doc_t current = handle;
+        if (current == null || current.isNull()) {
+            throw new ZvecException(ErrorCode.FAILED_PRECONDITION, "document is closed");
+        }
+        return current;
+    }
+
+    /** Returns {@code true} while the native handle is still usable. */
+    public boolean isOpen() {
+        return handle != null && !handle.isNull();
     }
 
     // =========================================================================
@@ -45,11 +68,16 @@ public class Doc implements AutoCloseable {
     // =========================================================================
 
     public void setPK(String pk) {
-        ZvecNative.zvec_doc_set_pk(handle, NativeSupport.utf8(pk));
+        if (pk == null) {
+            // The C API ignores a NULL primary key, which would surface much
+            // later as an opaque write failure.
+            throw new ZvecException(ErrorCode.INVALID_ARGUMENT, "primary key cannot be null");
+        }
+        ZvecNative.zvec_doc_set_pk(requireOpen(), NativeSupport.utf8(pk));
     }
 
     public String getPK() {
-        BytePointer pkPtr = ZvecNative.zvec_doc_get_pk_copy(handle);
+        BytePointer pkPtr = ZvecNative.zvec_doc_get_pk_copy(requireOpen());
         if (pkPtr == null || pkPtr.isNull()) {
             return "";
         }
@@ -59,68 +87,68 @@ public class Doc implements AutoCloseable {
     }
 
     public void setDocID(long docID) {
-        ZvecNative.zvec_doc_set_doc_id(handle, docID);
+        ZvecNative.zvec_doc_set_doc_id(requireOpen(), docID);
     }
 
     public long getDocID() {
-        return ZvecNative.zvec_doc_get_doc_id(handle);
+        return ZvecNative.zvec_doc_get_doc_id(requireOpen());
     }
 
     public void setScore(float score) {
-        ZvecNative.zvec_doc_set_score(handle, score);
+        ZvecNative.zvec_doc_set_score(requireOpen(), score);
     }
 
     public float getScore() {
-        return ZvecNative.zvec_doc_get_score(handle);
+        return ZvecNative.zvec_doc_get_score(requireOpen());
     }
 
     public void setOperator(DocOperator op) {
-        ZvecNative.zvec_doc_set_operator(handle, op.getCode());
+        ZvecNative.zvec_doc_set_operator(requireOpen(), op.getCode());
     }
 
     public DocOperator getOperator() {
-        return DocOperator.fromCode(ZvecNative.zvec_doc_get_operator(handle));
+        return DocOperator.fromCode(ZvecNative.zvec_doc_get_operator(requireOpen()));
     }
 
     public int getFieldCount() {
-        return (int) ZvecNative.zvec_doc_get_field_count(handle);
+        return (int) ZvecNative.zvec_doc_get_field_count(requireOpen());
     }
 
     public boolean isEmpty() {
-        return ZvecNative.zvec_doc_is_empty(handle);
+        return ZvecNative.zvec_doc_is_empty(requireOpen());
     }
 
     public void clear() {
-        ZvecNative.zvec_doc_clear(handle);
+        ZvecNative.zvec_doc_clear(requireOpen());
     }
 
     public boolean hasField(String name) {
-        return ZvecNative.zvec_doc_has_field(handle, NativeSupport.utf8(name));
+        return ZvecNative.zvec_doc_has_field(requireOpen(), NativeSupport.utf8(name));
     }
 
     public boolean hasFieldValue(String name) {
-        return ZvecNative.zvec_doc_has_field_value(handle, NativeSupport.utf8(name));
+        return ZvecNative.zvec_doc_has_field_value(requireOpen(), NativeSupport.utf8(name));
     }
 
     public boolean isFieldNull(String name) {
-        return ZvecNative.zvec_doc_is_field_null(handle, NativeSupport.utf8(name));
+        return ZvecNative.zvec_doc_is_field_null(requireOpen(), NativeSupport.utf8(name));
     }
 
     public void setFieldNull(String name) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_doc_set_field_null(handle, NativeSupport.utf8(name)));
+                ZvecNative.zvec_doc_set_field_null(requireOpen(), NativeSupport.utf8(name)));
     }
 
     public void removeField(String name) {
         ZvecException.throwIfError(
-                ZvecNative.zvec_doc_remove_field(handle, NativeSupport.utf8(name)));
+                ZvecNative.zvec_doc_remove_field(requireOpen(), NativeSupport.utf8(name)));
     }
 
     public List<String> getFieldNames() {
         PointerPointer names = new PointerPointer(1);
         SizeTPointer count = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_doc_get_field_names(handle, names, count));
+                ZvecNative.zvec_doc_get_field_names(requireOpen(), names, count));
         long n = count.get();
         List<String> result = new ArrayList<>((int) n);
         // The array pointer was written back into `names` itself (@ByPtrPtr).
@@ -142,7 +170,7 @@ public class Doc implements AutoCloseable {
         BytePointer valueMem = NativeSupport.utf8(value);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.STRING.getCode(),
+                        requireOpen(), NativeSupport.utf8(name), DataType.STRING.getCode(),
                         valueMem, NativeSupport.utf8Length(value)));
     }
 
@@ -151,49 +179,49 @@ public class Doc implements AutoCloseable {
         mem.put(0, (byte) (value ? 1 : 0));
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.BOOL.getCode(), mem, 1));
+                        requireOpen(), NativeSupport.utf8(name), DataType.BOOL.getCode(), mem, 1));
     }
 
     public void addInt32Field(String name, int value) {
         IntPointer mem = new IntPointer(1).put(value);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.INT32.getCode(), mem, 4));
+                        requireOpen(), NativeSupport.utf8(name), DataType.INT32.getCode(), mem, 4));
     }
 
     public void addInt64Field(String name, long value) {
         LongPointer mem = new LongPointer(1).put(value);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.INT64.getCode(), mem, 8));
+                        requireOpen(), NativeSupport.utf8(name), DataType.INT64.getCode(), mem, 8));
     }
 
     public void addUint32Field(String name, long value) {
         IntPointer mem = new IntPointer(1).put((int) value);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.UINT32.getCode(), mem, 4));
+                        requireOpen(), NativeSupport.utf8(name), DataType.UINT32.getCode(), mem, 4));
     }
 
     public void addUint64Field(String name, long value) {
         LongPointer mem = new LongPointer(1).put(value);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.UINT64.getCode(), mem, 8));
+                        requireOpen(), NativeSupport.utf8(name), DataType.UINT64.getCode(), mem, 8));
     }
 
     public void addFloatField(String name, float value) {
         FloatPointer mem = new FloatPointer(1).put(value);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.FLOAT.getCode(), mem, 4));
+                        requireOpen(), NativeSupport.utf8(name), DataType.FLOAT.getCode(), mem, 4));
     }
 
     public void addDoubleField(String name, double value) {
         DoublePointer mem = new DoublePointer(1).put(value);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.DOUBLE.getCode(), mem, 8));
+                        requireOpen(), NativeSupport.utf8(name), DataType.DOUBLE.getCode(), mem, 8));
     }
 
     /** Add a float32 vector field.  The data is copied into C-managed memory. */
@@ -204,7 +232,7 @@ public class Doc implements AutoCloseable {
         FloatPointer mem = new FloatPointer(vector);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.VECTOR_FP32.getCode(),
+                        requireOpen(), NativeSupport.utf8(name), DataType.VECTOR_FP32.getCode(),
                         mem, (long) vector.length * 4));
     }
 
@@ -216,7 +244,7 @@ public class Doc implements AutoCloseable {
         BytePointer mem = new BytePointer(data);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_add_field_by_value(
-                        handle, NativeSupport.utf8(name), DataType.BINARY.getCode(), mem, data.length));
+                        requireOpen(), NativeSupport.utf8(name), DataType.BINARY.getCode(), mem, data.length));
     }
 
     // =========================================================================
@@ -228,7 +256,7 @@ public class Doc implements AutoCloseable {
         SizeTPointer sizeRef = new SizeTPointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_pointer(
-                        handle, NativeSupport.utf8(name), DataType.STRING.getCode(), valueRef, sizeRef));
+                        requireOpen(), NativeSupport.utf8(name), DataType.STRING.getCode(), valueRef, sizeRef));
         Pointer valuePtr = valueRef.get(0);
         long size = sizeRef.get();
         if (valuePtr == null || valuePtr.isNull() || size == 0) {
@@ -242,7 +270,7 @@ public class Doc implements AutoCloseable {
         BytePointer mem = new BytePointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_basic(
-                        handle, NativeSupport.utf8(name), DataType.BOOL.getCode(), mem, 1));
+                        requireOpen(), NativeSupport.utf8(name), DataType.BOOL.getCode(), mem, 1));
         return mem.get(0) != 0;
     }
 
@@ -250,7 +278,7 @@ public class Doc implements AutoCloseable {
         IntPointer mem = new IntPointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_basic(
-                        handle, NativeSupport.utf8(name), DataType.INT32.getCode(), mem, 4));
+                        requireOpen(), NativeSupport.utf8(name), DataType.INT32.getCode(), mem, 4));
         return mem.get();
     }
 
@@ -258,7 +286,7 @@ public class Doc implements AutoCloseable {
         LongPointer mem = new LongPointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_basic(
-                        handle, NativeSupport.utf8(name), DataType.INT64.getCode(), mem, 8));
+                        requireOpen(), NativeSupport.utf8(name), DataType.INT64.getCode(), mem, 8));
         return mem.get();
     }
 
@@ -266,7 +294,7 @@ public class Doc implements AutoCloseable {
         IntPointer mem = new IntPointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_basic(
-                        handle, NativeSupport.utf8(name), DataType.UINT32.getCode(), mem, 4));
+                        requireOpen(), NativeSupport.utf8(name), DataType.UINT32.getCode(), mem, 4));
         return mem.get() & 0xFFFFFFFFL;
     }
 
@@ -274,7 +302,7 @@ public class Doc implements AutoCloseable {
         LongPointer mem = new LongPointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_basic(
-                        handle, NativeSupport.utf8(name), DataType.UINT64.getCode(), mem, 8));
+                        requireOpen(), NativeSupport.utf8(name), DataType.UINT64.getCode(), mem, 8));
         return mem.get();
     }
 
@@ -282,7 +310,7 @@ public class Doc implements AutoCloseable {
         FloatPointer mem = new FloatPointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_basic(
-                        handle, NativeSupport.utf8(name), DataType.FLOAT.getCode(), mem, 4));
+                        requireOpen(), NativeSupport.utf8(name), DataType.FLOAT.getCode(), mem, 4));
         return mem.get();
     }
 
@@ -290,7 +318,7 @@ public class Doc implements AutoCloseable {
         DoublePointer mem = new DoublePointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_basic(
-                        handle, NativeSupport.utf8(name), DataType.DOUBLE.getCode(), mem, 8));
+                        requireOpen(), NativeSupport.utf8(name), DataType.DOUBLE.getCode(), mem, 8));
         return mem.get();
     }
 
@@ -300,7 +328,7 @@ public class Doc implements AutoCloseable {
         SizeTPointer sizeRef = new SizeTPointer(1);
         ZvecException.throwIfError(
                 ZvecNative.zvec_doc_get_field_value_pointer(
-                        handle, NativeSupport.utf8(name), DataType.VECTOR_FP32.getCode(), valueRef, sizeRef));
+                        requireOpen(), NativeSupport.utf8(name), DataType.VECTOR_FP32.getCode(), valueRef, sizeRef));
         Pointer valuePtr = valueRef.get(0);
         long byteSize = sizeRef.get();
         if (valuePtr == null || valuePtr.isNull() || byteSize == 0) {
@@ -314,6 +342,28 @@ public class Doc implements AutoCloseable {
         return result;
     }
 
+    /**
+     * Get a binary field.  Returns a copy of the underlying data; the C API
+     * keeps ownership of the document-internal buffer.
+     */
+    public byte[] getBinaryField(String name) {
+        PointerPointer valueRef = new PointerPointer(1);
+        SizeTPointer sizeRef = new SizeTPointer(1);
+        ZvecException.throwIfError(
+                ZvecNative.zvec_doc_get_field_value_pointer(
+                        requireOpen(), NativeSupport.utf8(name), DataType.BINARY.getCode(), valueRef, sizeRef));
+        Pointer valuePtr = valueRef.get(0);
+        long size = sizeRef.get();
+        if (valuePtr == null || valuePtr.isNull() || size == 0) {
+            return new byte[0];
+        }
+        BytePointer bp = new BytePointer(valuePtr);
+        bp.capacity(size);
+        byte[] result = new byte[(int) size];
+        bp.get(result);
+        return result;
+    }
+
     // =========================================================================
     // Serialize / Deserialize
     // =========================================================================
@@ -322,7 +372,7 @@ public class Doc implements AutoCloseable {
         PointerPointer dataRef = new PointerPointer(1);
         SizeTPointer sizeRef = new SizeTPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_doc_serialize(handle, dataRef, sizeRef));
+                ZvecNative.zvec_doc_serialize(requireOpen(), dataRef, sizeRef));
         Pointer data = dataRef.get(0);
         long size = sizeRef.get();
         if (data == null || data.isNull() || size == 0) {
@@ -348,17 +398,20 @@ public class Doc implements AutoCloseable {
     }
 
     public void merge(Doc other) {
-        ZvecNative.zvec_doc_merge(handle, other.handle);
+        if (other == null) {
+            throw new ZvecException(ErrorCode.INVALID_ARGUMENT, "cannot merge a null document");
+        }
+        ZvecNative.zvec_doc_merge(requireOpen(), other.requireOpen());
     }
 
     public long memoryUsage() {
-        return ZvecNative.zvec_doc_memory_usage(handle);
+        return ZvecNative.zvec_doc_memory_usage(requireOpen());
     }
 
     public String toDetailString() {
         PointerPointer sRef = new PointerPointer(1);
         ZvecException.throwIfError(
-                ZvecNative.zvec_doc_to_detail_string(handle, sRef));
+                ZvecNative.zvec_doc_to_detail_string(requireOpen(), sRef));
         Pointer s = sRef.get(0);
         String result = NativeSupport.string(s);
         if (s != null && !s.isNull()) {
@@ -367,20 +420,11 @@ public class Doc implements AutoCloseable {
         return result;
     }
 
-    /**
-     * Document-level validation is not exposed by the Zvec C API; use
-     * {@link CollectionSchema#validate()} / {@link FieldSchema#validate()} instead.
-     */
-    public void validate(CollectionSchema schema, boolean isUpdate) {
-        throw new UnsupportedOperationException(
-                "zvec_doc_validate is not provided by the Zvec C API; validate the schema instead");
-    }
-
     // =========================================================================
     // Lifecycle
     // =========================================================================
 
-    public void destroy() {
+    public synchronized void destroy() {
         if (owned && handle != null && !handle.isNull()) {
             ZvecNative.zvec_doc_destroy(handle);
             handle = null;
@@ -388,7 +432,7 @@ public class Doc implements AutoCloseable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         destroy();
     }
 

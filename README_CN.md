@@ -179,13 +179,21 @@ zvec-java/
     │   ├── presets/ZvecConfig.java                  # JavaCPP InfoMapper:指导解析 c_api.h
     │   ├── ZvecNative.java                          # 【自动生成】低层 JNI 绑定(勿手改,已在 .gitignore)
     │   ├── NativeSupport.java                        # String <-> const char* 等桥接工具
+    │   ├── NativeLoader.java                         # 三级原生库加载器
     │   ├── Zvec.java                                # 顶层入口:初始化、版本、Collection 工厂
     │   ├── Collection.java                          # Collection 操作(增删改查、搜索)
     │   ├── CollectionOptions.java / CollectionSchema.java / CollectionStats.java
     │   ├── FieldSchema.java                         # 字段 Schema 定义
     │   ├── Doc.java                                 # 文档 CRUD(读写各类型字段)
-    │   ├── IndexParams.java                         # 索引参数(HNSW/IVF/Flat/Invert)
-    │   ├── VectorQuery.java / GroupByVectorQuery.java
+    │   ├── IndexParams.java                         # 索引参数(HNSW/IVF/Flat/Invert/Vamana/DiskANN/IVF-RaBitQ)
+    │   ├── VectorQuery.java / GroupByVectorQuery.java / MultiQuery.java / SubQuery.java
+    │   ├── FlatQueryParams.java / HnswQueryParams.java / IvfQueryParams.java /
+    │   │   IvfRabitqQueryParams.java / DiskAnnQueryParams.java /
+    │   │   VamanaQueryParams.java / FtsQueryParams.java  # 类型化查询参数,每种索引族一个
+    │   ├── FtsPayload.java                          # jieba 全文检索载荷
+    │   ├── DocIterator.java / IteratorOptions.java  # v0.7.0 集合迭代器
+    │   ├── IoBackendType.java                       # v0.7.0 I/O 后端枚举
+    │   ├── JiebaDictSupport.java                    # 解压内置的 jieba 词表
     │   ├── ConfigData.java / LogConfig.java
     │   ├── ZvecException.java
     │   └── DataType / IndexType / MetricType / QuantizeType / LogLevel / DocOperator / ErrorCode (枚举)
