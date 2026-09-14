@@ -20,7 +20,6 @@ English | [简体中文](README_CN.md)
 - **Jieba FTS out of the box**: the cppjieba dictionary (`jieba.dict.utf8` + `hmm_model.utf8`) is bundled inside the JAR under `zvec/jieba_dict/` and auto-registered at `Zvec.initialize()`, so the `jieba` full-text tokenizer needs no setup.
 - **Many data types**: 30+ field types, including sparse/dense vectors of various dimensions.
 - **Java 8+**: compatible with Java 8 and above.
-- **122 unit tests**: all passing; critical DML/DQL paths use strong assertions (topK count / score ordering / PK hits, update read-back, delete-removal verification). Tests exercising platform-gated indexes are skipped where zvec does not compile them in.
 
 ## Installation
 
