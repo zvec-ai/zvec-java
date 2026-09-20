@@ -58,7 +58,7 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <javacpp.version>1.5.11</javacpp.version>
+        <javacpp.version>1.5.14</javacpp.version>
         <junit.version>5.10.2</junit.version>
 
         <!-- Location of the Zvec core (git submodule at ./zvec). Override for local
