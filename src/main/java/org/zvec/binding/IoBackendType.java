@@ -6,15 +6,17 @@ package org.zvec.binding;
  *
  * <p>On Linux, zvec selects the first usable backend in this order:
  * {@link #IO_URING}, {@link #LIBAIO}, then {@link #PREAD}. macOS uses
- * {@link #PREAD}.
+ * {@link #PREAD}. Windows uses {@link #WINDOWS_OVERLAPPED} (zvec &ge; v0.8.0).
  */
 public enum IoBackendType {
     /** Synchronous pread(); no async I/O. */
     PREAD(0),
     /** libaio loaded at runtime via dlopen(). */
     LIBAIO(1),
-    /** io_uring via raw kernel syscalls (zero dependency). */
-    IO_URING(2);
+    /** io_uring via raw Linux kernel syscalls (zero dependency). */
+    IO_URING(2),
+    /** Windows unbuffered overlapped I/O with a per-context completion port. */
+    WINDOWS_OVERLAPPED(3);
 
     private final int code;
 

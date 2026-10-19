@@ -5,9 +5,9 @@
 # Compiles and runs scripts/smoke-test/SmokeTest.java against an already-built
 # JAR, so it exercises exactly what a consumer resolves: JavaCPP unpacks and
 # loads libjniZvecNative + libzvec_c_api for the current platform out of the
-# JAR, the bundled cppjieba dictionary is extracted and registered, and a real
-# collection is created, written to and queried (HNSW vector search plus a
-# jieba full-text search).
+# JAR, and a real collection is created, written to and queried (HNSW vector
+# search plus a jieba full-text search, which runs on the dictionary embedded
+# in the native library).
 #
 # Needs a JDK and nothing else - no Docker, no Maven, no zvec checkout. Run it
 # on a machine whose glibc is at or below the floor the README advertises

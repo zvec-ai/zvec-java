@@ -69,7 +69,7 @@ your IDE, so do not "fix" formatting that the build does not complain about.
 - Convert every C return code with `ZvecException.throwIfError(...)`; do not
   swallow non-zero codes.
 - Helpers that are not part of the public API stay package-private
-  (`NativeSupport`, `JiebaDictSupport`).
+  (`NativeSupport`).
 - Library code does not print to `System.out`.
 
 ### Covering a new C API function

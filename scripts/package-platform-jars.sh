@@ -3,11 +3,11 @@
 # build output (run `mvn package` first); the artifact layout follows
 # org.duckdb:duckdb_jdbc. Outputs:
 #
-#   target/zvec-java-<version>-macosx-arm64.jar     (classes + jieba dict +
-#   target/zvec-java-<version>-linux-x86_64.jar       that platform's natives
-#   target/zvec-java-<version>-linux-arm64.jar        only)
+#   target/zvec-java-<version>-macosx-arm64.jar     (classes + that platform's
+#   target/zvec-java-<version>-linux-x86_64.jar       natives only)
+#   target/zvec-java-<version>-linux-arm64.jar
 #   target/zvec-java-<version>-windows-x86_64.jar
-#   target/zvec-java-<version>-nolib.jar            (classes + dict, no natives)
+#   target/zvec-java-<version>-nolib.jar            (classes, no natives)
 #
 # Natives inside the classifier JARs are normalized to the JavaCPP package
 # layout org/zvec/binding/<platform>/ regardless of where they were staged.
@@ -69,8 +69,8 @@ Implementation-Version: $VERSION
 Implementation-Vendor: zvec-ai
 MANIFEST
 
-# Base staging tree: compiled classes + bundled resources (jieba dict), with
-# every platform's native directory removed (both known layouts).
+# Base staging tree: compiled classes + bundled resources, with every
+# platform's native directory removed (both known layouts).
 base_stage="$(mktemp -d)"
 trap 'rm -rf "$base_stage" "$manifest"' EXIT
 cp -R "$CLASSES_DIR/." "$base_stage/"

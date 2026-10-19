@@ -29,9 +29,10 @@ import java.util.Random;
  * <p>What it covers, in order:
  * <ol>
  *   <li>the JNI glue and {@code zvec_c_api} actually load on this platform;</li>
- *   <li>the cppjieba dictionary bundled in the JAR extracts and registers;</li>
  *   <li>a collection can be created with HNSW, jieba-FTS and invert indexes;</li>
- *   <li>insert / flush / vector query / full-text query all return real data.</li>
+ *   <li>insert / flush / vector query / full-text query all return real data -
+ *       the Chinese full-text query is what proves the jieba dictionary
+ *       embedded in the native library really is usable.</li>
  * </ol>
  *
  * <p>Run it via {@code scripts/smoke-test.sh}, which assembles the classpath.
@@ -81,17 +82,7 @@ public final class SmokeTest {
         check(version != null && !version.isEmpty(), "Zvec.getVersion() returned nothing");
         verifyVersion(version);
 
-        banner("2. Extract the bundled jieba dictionary");
-        check(Zvec.isJiebaDictAvailable(), "no jieba dict registered after initialize");
-        String dictDir = Zvec.useBundledJiebaDict();
-        System.out.println("  dict dir         = " + dictDir);
-        for (String name : new String[] {"jieba.dict.utf8", "hmm_model.utf8"}) {
-            File file = new File(dictDir, name);
-            check(file.isFile() && file.length() > 0, "missing or empty dict file " + file);
-            System.out.printf("  %-19s %,d bytes%n", name, file.length());
-        }
-
-        banner("3. Create a collection (HNSW + jieba FTS + int field)");
+        banner("2. Create a collection (HNSW + jieba FTS + int field)");
         File tmp = Files.createTempDirectory("zvec-smoke-").toFile();
         String dbPath = new File(tmp, "coll").getAbsolutePath();
 
@@ -103,8 +94,9 @@ public final class SmokeTest {
             schema.addField(vector);
         }
         try (FieldSchema content = new FieldSchema("content", DataType.STRING, false, 0)) {
-            // "jieba" is the tokenizer that needs the bundled dictionary, so this
-            // is the check that the dict really reached the native layer.
+            // "jieba" runs on the default dictionary embedded in the native
+            // library, so creating this index - and querying it in step 4b - is
+            // the check that the embedded resource really is usable.
             try (IndexParams fts = IndexParams.createFTS("jieba", new String[] {"lowercase"}, null)) {
                 content.setIndexParams(fts);
             }
@@ -124,7 +116,7 @@ public final class SmokeTest {
             queryByVector(collection);
             queryByFts(collection);
 
-            banner("6. Collection stats and shutdown");
+            banner("5. Collection stats and shutdown");
             System.out.println("  stats            = " + collection.getStats());
         } finally {
             collection.close();
@@ -134,7 +126,7 @@ public final class SmokeTest {
     }
 
     private static void insertAndFlush(Collection collection) {
-        banner("4. Insert five documents and flush");
+        banner("3. Insert five documents and flush");
         String[][] rows = {
                 {"doc_0", "向量数据库支持全文检索", "2020"},
                 {"doc_1", "机器学习入门教程", "2021"},
@@ -160,7 +152,7 @@ public final class SmokeTest {
     }
 
     private static void queryByVector(Collection collection) {
-        banner("5a. Vector query (top-3, cosine)");
+        banner("4a. Vector query (top-3, cosine)");
         try (VectorQuery query = new VectorQuery()) {
             query.setFieldName("embedding");
             query.setTopK(3);
@@ -175,7 +167,7 @@ public final class SmokeTest {
     }
 
     private static void queryByFts(Collection collection) {
-        banner("5b. Full-text query through the bundled jieba tokenizer");
+        banner("4b. Full-text query through the jieba tokenizer");
         try (VectorQuery query = new VectorQuery()) {
             query.setFieldName("content");
             query.setTopK(10);
@@ -188,7 +180,8 @@ public final class SmokeTest {
                 System.out.println("    pk=" + hit.getPK());
             }
             check(!hits.isEmpty(),
-                    "jieba FTS query matched nothing - the bundled dictionary is not wired up");
+                    "jieba FTS query matched nothing - the dictionary embedded in the"
+                            + " native library is not usable");
             Doc.freeDocs(hits);
         }
     }

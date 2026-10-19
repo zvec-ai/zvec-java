@@ -17,7 +17,7 @@ English | [简体中文](README_CN.md)
 - **AutoCloseable resource management**: every object holding native resources implements `AutoCloseable` for use with try-with-resources.
 - **Rich index support**: HNSW, IVF, Flat, Invert (inverted), Vamana, DiskANN and IVF-RaBitQ (zvec &ge; v0.7.0), plus quantized variants (FP16/INT8/INT4/RaBitQ). Platform availability follows zvec itself: DiskANN requires Linux x86_64/ARM64 or macOS ARM64, IVF-RaBitQ requires Linux x86_64; on other platforms the native layer reports `NotSupported`.
 - **Document iteration**: snapshot iterators over collections with output-field selection (`Collection.createIterator`, zvec &ge; v0.7.0).
-- **Jieba FTS out of the box**: the cppjieba dictionary (`jieba.dict.utf8` + `hmm_model.utf8`) is bundled inside the JAR under `zvec/jieba_dict/` and auto-registered at `Zvec.initialize()`, so the `jieba` full-text tokenizer needs no setup.
+- **Jieba FTS out of the box**: the default cppjieba dictionary and HMM model are compiled into the native library (zvec &ge; v0.8.0), so the `jieba` full-text tokenizer needs no setup — nothing to download, extract or point at.
 - **Many data types**: 30+ field types, including sparse/dense vectors of various dimensions.
 - **Java 8+**: compatible with Java 8 and above.
 
@@ -25,8 +25,8 @@ English | [简体中文](README_CN.md)
 
 Released artifacts are published to **Maven Central** as `org.zvec:zvec-java`.
 Adding the dependency is the entire setup: the JAR already carries the native
-libraries and the cppjieba dictionary, so there is no separate native install
-step and no library-path configuration.
+libraries, so there is no separate native install step and no library-path
+configuration.
 
 **Maven**
 
@@ -57,12 +57,12 @@ The version tracks the bundled zvec native version: `0.7.0` ships zvec v0.7.0.
 
 | Artifact | Contents | Pick it when |
 |----------|----------|--------------|
-| *(no classifier)* | classes + jieba dict + natives for **all** supported platforms | You want one dependency that runs anywhere. Simplest choice, largest download. |
-| `macosx-arm64` | classes + jieba dict + macOS ARM64 natives | You deploy to a single known platform and want a smaller artifact. |
-| `linux-x86_64` | classes + jieba dict + Linux x86_64 natives | Same, for Linux x86_64. |
-| `linux-arm64` | classes + jieba dict + Linux ARM64 natives | Same, for Linux ARM64. |
-| `windows-x86_64` | classes + jieba dict + Windows x86_64 natives | Same, for Windows x86_64. |
-| `nolib` | classes + jieba dict, **no** natives | You build or ship `zvec_c_api` yourself and point the loader at it (see [How are native libraries loaded?](#how-are-native-libraries-loaded)). |
+| *(no classifier)* | classes + natives for **all** supported platforms | You want one dependency that runs anywhere. Simplest choice, largest download. |
+| `macosx-arm64` | classes + macOS ARM64 natives | You deploy to a single known platform and want a smaller artifact. |
+| `linux-x86_64` | classes + Linux x86_64 natives | Same, for Linux x86_64. |
+| `linux-arm64` | classes + Linux ARM64 natives | Same, for Linux ARM64. |
+| `windows-x86_64` | classes + Windows x86_64 natives | Same, for Windows x86_64. |
+| `nolib` | classes, **no** natives | You build or ship `zvec_c_api` yourself and point the loader at it (see [How are native libraries loaded?](#how-are-native-libraries-loaded)). |
 
 Single-platform classifiers:
 
@@ -109,10 +109,13 @@ straight to [Code Examples](#code-examples).
 
 The Zvec core is included as a **git submodule** at `./zvec`:
 
-> **Version requirement**: the submodule is pinned to **zvec v0.7.0**. The
-> v0.7.0 C API adds DiskANN / IVF-RaBitQ index and query parameters, the
-> collection document iterator, and I/O backend introspection; the bindings
-> expose all of them.
+> **Version requirement**: the submodule is pinned to **zvec v0.8.0-beta**
+> (`c133f20`). Relative to v0.7.0 the C API drops the four jieba
+> dictionary-directory entry points — the default dictionary and HMM model are
+> now compiled into `libzvec_c_api` — and adds `ZVEC_DATA_TYPE_VECTOR_UINT8`
+> plus the Windows overlapped-I/O backend; the bindings follow both. Everything
+> v0.7.0 added (DiskANN / IVF-RaBitQ index and query parameters, the collection
+> document iterator, I/O backend introspection) is still exposed.
 
 ```bash
 git clone https://github.com/zvec-ai/zvec-java.git
@@ -130,6 +133,11 @@ cmake --build . --target zvec_c_api -j
 # Artifacts are placed under zvec/build/lib/
 cd ../..
 ```
+
+> **CMake 4.x**: add `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` to the `cmake` line.
+> Some of zvec's third-party subprojects still declare a
+> `cmake_minimum_required` below 3.5, which CMake 4 refuses to configure; zvec's
+> own iOS workflow passes the same flag.
 
 ### Build the Java binding
 
@@ -170,9 +178,9 @@ java -jar target/zvec-java-0.7.0-with-dependencies.jar
 
 `scripts/smoke-test.sh` loads an already-built JAR the way a consumer does and
 exercises it end to end: JavaCPP unpacks this platform's natives out of the JAR,
-the bundled jieba dictionary is extracted and registered, then a real collection
-is created, written to and queried by both vector search and jieba full-text
-search. It needs a JDK and nothing else — no Docker, no Maven, no zvec checkout.
+then a real collection is created, written to and queried by both vector search
+and jieba full-text search. It needs a JDK and nothing else — no Docker, no
+Maven, no zvec checkout.
 
 ```bash
 scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar
@@ -215,7 +223,6 @@ zvec-java/
     │   ├── FtsPayload.java                          # jieba full-text search payload
     │   ├── DocIterator.java / IteratorOptions.java  # v0.7.0 collection iterator
     │   ├── IoBackendType.java                       # v0.7.0 I/O backend enum
-    │   ├── JiebaDictSupport.java                    # Extracts the bundled jieba FTS dict
     │   ├── ConfigData.java / LogConfig.java
     │   ├── ZvecException.java
     │   └── DataType / IndexType / MetricType / QuantizeType / LogLevel / DocOperator / ErrorCode (enums)
@@ -225,8 +232,8 @@ zvec-java/
         ├── DocCoverageTest.java                     # Doc metadata / UTF-8 / exception strong assertions
         ├── SchemaIndexConfigCoverageTest.java       # Schema / IndexParams (out params) / Config / exceptions
         ├── CollectionQueryCoverageTest.java         # DML/DQL strong assertions (query/update/delete/filter)
-        ├── ApiCoverageTest.java                     # Wider API surface: enum codes, DiskANN / IVF-RaBitQ / FTS params, multi-query, iterator, I/O backend, jieba dict
-        └── SearchIntegrationTest.java               # End-to-end search: FTS-only, hybrid vector + FTS, multi-query fan-out
+        ├── ApiCoverageTest.java                     # Wider API surface: enum codes, DiskANN / IVF-RaBitQ / FTS params, multi-query, iterator, I/O backend
+        └── SearchIntegrationTest.java               # End-to-end search: FTS-only, jieba on the embedded dict, hybrid vector + FTS, multi-query fan-out
 ```
 
 ## Code Examples
@@ -361,15 +368,23 @@ A local `mvn package` produces a fat JAR containing only the native library for 
 
 ### How does the jieba FTS tokenizer find its dictionary?
 
-The JAR bundles the cppjieba dictionary files (`jieba.dict.utf8`, `hmm_model.utf8`) under `zvec/jieba_dict/`. During `Zvec.initialize()` they are extracted to a per-version cache directory (default `~/.zvec/jieba_dict/<zvec-version>`, falling back to `<tmpdir>/zvec-java/jieba_dict/<version>`) and registered via `zvec_set_default_jieba_dict_dir()` — so creating a `jieba` FTS index works with no extra setup.
+It no longer has to look for one. Since zvec v0.8.0 the default cppjieba
+dictionary and HMM model are LZ4-compressed and compiled into `libzvec_c_api`,
+and the tokenizer decompresses them in memory on first use: nothing is written
+to disk, there is no cache directory, and there is no registration call, so
+creating a `jieba` FTS index works with no setup at all.
 
-Resolution priority (highest first) at tokenization time:
+An external dictionary still takes precedence when you supply one. Resolution
+order at tokenization time, highest first:
 
-1. per-field `extra_params.jieba_dict_dir`
+1. the per-field `jieba_dict_dir` extra param — pass it as the `extraParams`
+   JSON of `IndexParams.createFTS("jieba", filters, "{\"jieba_dict_dir\":\"/opt/dict\"}")`
 2. the `ZVEC_JIEBA_DICT_DIR` environment variable
-3. the process-wide default (`ConfigData.setJiebaDictDir()` / `Zvec.setDefaultJiebaDictDir()` / the auto-extracted bundled dict)
+3. the dictionary embedded in the native library
 
-Override the extraction location with `-Dzvec.jieba.cache.dir=/dir` (or `ZVEC_JIEBA_CACHE_DIR`).
+An external directory has to contain `jieba.dict.utf8` and `hmm_model.utf8`.
+`user_dict_path` adds terms on top of whichever dictionary was selected,
+including the embedded one.
 
 ### `Collection.fetch()` returns empty / InvalidArgument
 
@@ -413,6 +428,7 @@ This project is licensed under the **Apache License 2.0**, consistent with the m
   release pipelines enforce that: every shipped native library is scanned for
   `range_tree` / `locktree` / `PessimisticTransaction` symbols, and the build
   fails if any of them show up.
-- The cppjieba dictionary bundled under `zvec/jieba_dict/` (`jieba.dict.utf8`,
-  `hmm_model.utf8`) comes from [cppjieba](https://github.com/yanyiwu/cppjieba)
-  and is licensed under the **MIT** license.
+- The default cppjieba dictionary and HMM model are compiled into the native
+  `zvec_c_api` library; they come from
+  [cppjieba](https://github.com/yanyiwu/cppjieba) and are licensed under the
+  **MIT** license.

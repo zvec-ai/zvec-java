@@ -17,13 +17,13 @@
 - **AutoCloseable 资源管理**:所有持有原生资源的对象均实现 `AutoCloseable`,支持 try-with-resources
 - **丰富的索引支持**:HNSW、IVF、Flat、Invert(倒排)、Vamana、DiskANN、IVF-RaBitQ(zvec ≥ v0.7.0)及量化变体(FP16/INT8/INT4/RaBitQ)。平台可用性与 zvec 本体一致:DiskANN 需要 Linux x86_64/ARM64 或 macOS ARM64,IVF-RaBitQ 需要 Linux x86_64,其他平台原生层返回 `NotSupported`
 - **文档迭代器**:支持对集合做快照遍历,可选择输出字段(`Collection.createIterator`,zvec ≥ v0.7.0)
-- **Jieba 全文索引开箱即用**:JAR 内置 cppjieba 词表(`jieba.dict.utf8` + `hmm_model.utf8`,位于 `zvec/jieba_dict/`),`Zvec.initialize()` 时自动注册,`jieba` 分词器无需任何额外配置
+- **Jieba 全文索引开箱即用**:cppjieba 默认词表与 HMM 模型已编译进原生库(zvec ≥ v0.8.0),`jieba` 分词器无需任何额外配置 —— 不用下载、不用解压、也不用指定路径
 - **多种数据类型**:支持 30 余种字段类型,包括各维度稀疏/稠密向量
 - **Java 8+**:最低兼容 Java 8
 
 ## 安装
 
-发布产物已上传 **Maven Central**,坐标为 `org.zvec:zvec-java`。加上依赖就是全部准备工作:JAR 内已经带了各平台原生库和 cppjieba 词表,**不需要单独安装原生库,也不需要配置任何库路径**。
+发布产物已上传 **Maven Central**,坐标为 `org.zvec:zvec-java`。加上依赖就是全部准备工作:JAR 内已经带了各平台原生库,**不需要单独安装原生库,也不需要配置任何库路径**。
 
 **Maven**
 
@@ -51,12 +51,12 @@ implementation 'org.zvec:zvec-java:0.7.0'
 
 | 产物 | 内容 | 适用场景 |
 |------|------|----------|
-| *(不带 classifier)* | classes + jieba 词表 + **全部**受支持平台的原生库 | 想用一个依赖跑遍所有平台。最省事,体积最大。 |
-| `macosx-arm64` | classes + jieba 词表 + macOS ARM64 原生库 | 部署平台确定,想要更小的体积。 |
-| `linux-x86_64` | classes + jieba 词表 + Linux x86_64 原生库 | 同上,Linux x86_64。 |
-| `linux-arm64` | classes + jieba 词表 + Linux ARM64 原生库 | 同上,Linux ARM64。 |
-| `windows-x86_64` | classes + jieba 词表 + Windows x86_64 原生库 | 同上,Windows x86_64。 |
-| `nolib` | classes + jieba 词表,**不含**原生库 | 自己编译或分发 `zvec_c_api`,再让加载器指向它(见[原生库如何加载?](#原生库如何加载))。 |
+| *(不带 classifier)* | classes + **全部**受支持平台的原生库 | 想用一个依赖跑遍所有平台。最省事,体积最大。 |
+| `macosx-arm64` | classes + macOS ARM64 原生库 | 部署平台确定,想要更小的体积。 |
+| `linux-x86_64` | classes + Linux x86_64 原生库 | 同上,Linux x86_64。 |
+| `linux-arm64` | classes + Linux ARM64 原生库 | 同上,Linux ARM64。 |
+| `windows-x86_64` | classes + Windows x86_64 原生库 | 同上,Windows x86_64。 |
+| `nolib` | classes,**不含**原生库 | 自己编译或分发 `zvec_c_api`,再让加载器指向它(见[原生库如何加载?](#原生库如何加载))。 |
 
 指定单平台 classifier:
 
@@ -94,6 +94,12 @@ implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 
 Zvec 核心以 **git submodule** 形式引入到 `./zvec`:
 
+> **版本要求**:子模块当前指向 **zvec v0.8.0-beta**(`c133f20`)。相对 v0.7.0,C API
+> 删掉了 4 个 jieba 词表目录相关入口 —— 默认词表与 HMM 模型现在直接编译进
+> `libzvec_c_api` —— 并新增了 `ZVEC_DATA_TYPE_VECTOR_UINT8` 与 Windows overlapped I/O
+> 后端,绑定层都已跟进。v0.7.0 引入的能力(DiskANN / IVF-RaBitQ 索引与查询参数、
+> 集合文档迭代器、I/O 后端自省)依然全部暴露。
+
 ```bash
 git clone https://github.com/zvec-ai/zvec-java.git
 cd zvec-java
@@ -110,6 +116,10 @@ cmake --build . --target zvec_c_api -j
 # 产物位于 zvec/build/lib/
 cd ../..
 ```
+
+> **CMake 4.x**:在 `cmake` 那一行加上 `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`。
+> zvec 的部分三方子工程仍声明了低于 3.5 的 `cmake_minimum_required`,CMake 4 会直接
+> 拒绝 configure;zvec 自己的 iOS workflow 也传了同样的参数。
 
 ### 构建 Java 绑定
 
@@ -149,9 +159,9 @@ java -jar target/zvec-java-0.7.0-with-dependencies.jar
 ### 对构建产物做冒烟测试
 
 `scripts/smoke-test.sh` 会按消费者的方式加载一个已构建好的 JAR 并完整跑一遍:
-JavaCPP 从 JAR 中解压出当前平台的原生库,内置的 jieba 词表被释放并注册,然后真实
-地创建一个 collection、写入数据,并分别用向量检索和 jieba 全文检索查询。它只依赖
-JDK —— 不需要 Docker、不需要 Maven、也不需要 zvec 源码。
+JavaCPP 从 JAR 中解压出当前平台的原生库,然后真实地创建一个 collection、写入数据,
+并分别用向量检索和 jieba 全文检索查询。它只依赖 JDK —— 不需要 Docker、不需要
+Maven、也不需要 zvec 源码。
 
 ```bash
 scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar
@@ -192,7 +202,6 @@ zvec-java/
     │   ├── FtsPayload.java                          # jieba 全文检索载荷
     │   ├── DocIterator.java / IteratorOptions.java  # v0.7.0 集合迭代器
     │   ├── IoBackendType.java                       # v0.7.0 I/O 后端枚举
-    │   ├── JiebaDictSupport.java                    # 解压内置的 jieba 词表
     │   ├── ConfigData.java / LogConfig.java
     │   ├── ZvecException.java
     │   └── DataType / IndexType / MetricType / QuantizeType / LogLevel / DocOperator / ErrorCode (枚举)
@@ -202,8 +211,8 @@ zvec-java/
         ├── DocCoverageTest.java                     # Doc 元数据/UTF-8/异常 强断言
         ├── SchemaIndexConfigCoverageTest.java       # Schema/IndexParams(out 参数)/Config/异常
         ├── CollectionQueryCoverageTest.java         # DML/DQL 强断言(query/update/delete/filter)
-        ├── ApiCoverageTest.java                     # 更广的 API 面:枚举码、DiskANN/IVF-RaBitQ/FTS 参数、multi-query、迭代器、I/O 后端、jieba 词表
-        └── SearchIntegrationTest.java               # 端到端检索:纯 FTS、向量 + FTS 混合、multi-query 多路子查询
+        ├── ApiCoverageTest.java                     # 更广的 API 面:枚举码、DiskANN/IVF-RaBitQ/FTS 参数、multi-query、迭代器、I/O 后端
+        └── SearchIntegrationTest.java               # 端到端检索:纯 FTS、内嵌词表上的 jieba、向量 + FTS 混合、multi-query 多路子查询
 ```
 
 ## 代码示例
@@ -338,15 +347,18 @@ ZVEC_NATIVE_PATH=/path/to/zvec/build/lib java -jar app.jar
 
 ### jieba 分词器如何找到词表?
 
-JAR 内置了 cppjieba 词表文件(`jieba.dict.utf8`、`hmm_model.utf8`),位于 `zvec/jieba_dict/`。`Zvec.initialize()` 期间,它们会被解压到一个按版本区分的缓存目录(默认 `~/.zvec/jieba_dict/<zvec-version>`,home 目录不可写时回退到 `<tmpdir>/zvec-java/jieba_dict/<version>`),并通过 `zvec_set_default_jieba_dict_dir()` 注册,因此创建 `jieba` 全文索引不需要任何额外配置。
+它已经不需要去找了。从 zvec v0.8.0 起,cppjieba 默认词表与 HMM 模型以 LZ4 压缩形式
+编译进 `libzvec_c_api`,分词器首次使用时在内存里解压:不落盘、没有缓存目录、也没有
+注册调用,因此创建 `jieba` 全文索引完全不需要配置。
 
-分词时的解析优先级(从高到低):
+确实要用外部词表时,外部词表的优先级更高。分词时的解析顺序(从高到低):
 
-1. 字段级 `extra_params.jieba_dict_dir`
+1. 字段级 `jieba_dict_dir` 额外参数 —— 通过 `IndexParams.createFTS("jieba", filters, "{\"jieba_dict_dir\":\"/opt/dict\"}")` 的 `extraParams` JSON 传入
 2. `ZVEC_JIEBA_DICT_DIR` 环境变量
-3. 进程级默认值(`ConfigData.setJiebaDictDir()` / `Zvec.setDefaultJiebaDictDir()` / 自动解压的内置词表)
+3. 编译进原生库的默认词表
 
-用 `-Dzvec.jieba.cache.dir=/dir`(或 `ZVEC_JIEBA_CACHE_DIR`)可以改变解压位置。
+外部目录里必须包含 `jieba.dict.utf8` 与 `hmm_model.utf8`。`user_dict_path` 会在选中的
+词表(包括内嵌词表)之上追加自定义词条。
 
 ### `Collection.fetch()` 返回空 / InvalidArgument
 
@@ -381,5 +393,5 @@ Zvec C API 未提供文档级校验函数(`zvec_doc_validate` 不存在),该方�
   (`utilities/transactions/lock/range/`),而 zvec 从不使用悲观事务,因此这些目标文件不会
   被链接进发布的二进制。两条发布流水线都会强制校验这一点:每个待发布的原生库都会被扫描
   `range_tree` / `locktree` / `PessimisticTransaction` 符号,一旦出现即构建失败。
-- 打包在 `zvec/jieba_dict/` 下的 cppjieba 词表(`jieba.dict.utf8`、`hmm_model.utf8`)
-  来自 [cppjieba](https://github.com/yanyiwu/cppjieba),采用 **MIT** 许可证。
+- cppjieba 的默认词表与 HMM 模型被编译进原生库 `zvec_c_api`,来自
+  [cppjieba](https://github.com/yanyiwu/cppjieba),采用 **MIT** 许可证。

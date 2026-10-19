@@ -7,6 +7,52 @@ zvec `v0.7.0`. A binding-only fix bumps the third segment.
 
 ## [Unreleased]
 
+### Added
+
+- `DataType.VECTOR_UINT8` (28) and `IoBackendType.WINDOWS_OVERLAPPED` (3),
+  following the two constants the C API gained since v0.7.0 — a uint8 vector
+  storage type for the configurable flat/refine storage, and the Windows
+  unbuffered overlapped-I/O backend DiskAnn now uses there.
+- `SearchIntegrationTest.testJiebaFtsOnEmbeddedDict`: a Chinese full-text
+  search that configures no dictionary anywhere, which is what proves the
+  native library's embedded default dictionary actually works.
+
+### Changed
+
+- The `zvec` submodule moved from `v0.7.0` to `v0.8.0-beta`. The native
+  libraries report `v0.8.0-beta`, so `Zvec.getVersionMajor/Minor/Patch()`
+  return 0.8.0.
+- This project no longer ships or registers the jieba FTS dictionary. zvec
+  v0.8.0 compiles cppjieba's default dictionary and HMM model into
+  `libzvec_c_api` (LZ4-compressed, decompressed in memory on first use), so
+  the JAR carries no `zvec/jieba_dict/` resources — 5.6 MB of dictionary,
+  2.1 MB deflated, out of every artifact — and `Zvec.initialize()` no longer
+  extracts anything to `~/.zvec/jieba_dict/<version>`, which also retires
+  `-Dzvec.jieba.cache.dir` / `ZVEC_JIEBA_CACHE_DIR` and the read-only-host
+  fallback. An external dictionary still wins when one is supplied: the
+  per-field `jieba_dict_dir` extra param first, then `ZVEC_JIEBA_DICT_DIR`.
+- Vamana two-pass graph construction now reads back as **on** by default,
+  matching the native default zvec flipped in #761. `createVamana()` does not
+  pass the flag, so the change is upstream's, and the test that pinned the old
+  default now pins the new one.
+- The `Release` workflow no longer stages `data/jieba_dict` into the prebuilt
+  C library archives, mirroring the same removal in zvec's own packaging; the
+  `Publish JAR` workflow now fails if dictionary resources reappear inside a
+  JAR.
+
+### Removed
+
+- `Zvec.setDefaultJiebaDictDir()`, `Zvec.getDefaultJiebaDictDir()`,
+  `Zvec.useBundledJiebaDict()`, `Zvec.isJiebaDictAvailable()`,
+  `ConfigData.setJiebaDictDir()`, `ConfigData.getJiebaDictDir()` and the
+  internal `JiebaDictSupport`. **Breaking**: these were public in 0.7.0, but
+  the four C entry points behind them (`zvec_set_default_jieba_dict_dir`,
+  `zvec_get_default_jieba_dict_dir`, `zvec_config_data_set_jieba_dict_dir`,
+  `zvec_config_data_get_jieba_dict_dir`) no longer exist in the v0.8.0 C API.
+  Nothing replaces them, because there is nothing left to configure; callers
+  can simply delete the setup, and `Zvec.initialize()` no longer touches the
+  filesystem on their behalf.
+
 ## [0.7.0]
 
 First release, cut from the zvec v0.7.0 C API and published to Maven Central as

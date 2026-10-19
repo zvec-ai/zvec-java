@@ -493,14 +493,17 @@ jobs:
               fi
             done
           done
-          echo "=== Bundled jieba FTS dict inside $JAR ==="
-          echo "$ENTRIES" | grep 'zvec/jieba_dict/' || true
-          for f in jieba.dict.utf8 hmm_model.utf8; do
-            if ! echo "$ENTRIES" | grep -q "zvec/jieba_dict/$f"; then
-              echo "::error::jieba dict file zvec/jieba_dict/$f missing from the fat JAR"
-              exit 1
-            fi
-          done
+          echo "=== Jieba dict resources inside $JAR (expect none) ==="
+          # Since zvec v0.8.0 the jieba default dictionary and HMM model are
+          # compiled into libzvec_c_api, so the JAR must not carry its own copy:
+          # ~2 MB of dead weight, and a second dictionary that could drift from
+          # the one the native tokenizer actually uses.
+          if echo "$ENTRIES" | grep -q 'zvec/jieba_dict/'; then
+            echo "::error::stale jieba dict resources found in the fat JAR; the dictionary is embedded in the native library"
+            echo "$ENTRIES" | grep 'zvec/jieba_dict/'
+            exit 1
+          fi
+          echo "no dictionary resources (embedded in the native library) ✓"
 
       - name: Verify the linux natives stay glibc 2.27 compatible
         shell: bash

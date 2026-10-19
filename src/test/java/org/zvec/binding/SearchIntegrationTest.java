@@ -71,6 +71,79 @@ class SearchIntegrationTest extends TestSupport {
         }
     }
 
+    // ------------------------------------------- jieba FTS on the embedded dictionary
+
+    /**
+     * Chinese full-text search through the {@code jieba} tokenizer, with no
+     * dictionary configured anywhere: the default dictionary and HMM model are
+     * embedded in the native library (zvec &ge; v0.8.0) and decompressed on
+     * first use. Before that they had to be shipped alongside the library and
+     * registered explicitly, so this is what proves the embedded defaults are
+     * really wired up - a missing dictionary fails index creation or leaves the
+     * query matching nothing.
+     */
+    @Test
+    void testJiebaFtsOnEmbeddedDict(@TempDir Path dir) {
+        CollectionSchema schema = new CollectionSchema("jieba_fts");
+        try (FieldSchema title = new FieldSchema("title", DataType.STRING, false, 0)) {
+            schema.addField(title);
+        }
+        try (FieldSchema content = new FieldSchema("content", DataType.STRING, false, 0)) {
+            // No extra_params: no "jieba_dict_dir", so the embedded default
+            // dictionary is the only source the tokenizer can use.
+            try (IndexParams fts = IndexParams.createFTS("jieba", null, null)) {
+                content.setIndexParams(fts);
+            }
+            schema.addField(content);
+        }
+
+        String path = dir.resolve("coll").toString();
+        try (Collection coll = Zvec.createAndOpen(path, schema, null)) {
+            schema.close();
+
+            List<Doc> docs = new ArrayList<>();
+            docs.add(makeDoc("pk_0", "向量数据库支持全文检索", "db"));
+            docs.add(makeDoc("pk_1", "分布式系统需要高可用", "dist"));
+            docs.add(makeDoc("pk_2", "plain ascii document", "ascii"));
+            Collection.WriteResult wr = coll.insert(docs);
+            Doc.freeDocs(docs);
+            assertEquals(3, wr.successCount, "all docs should insert");
+            coll.flush();
+
+            List<Doc> hits = ftsQuery(coll, "数据库");
+            try {
+                Set<String> matched = new HashSet<>();
+                for (Doc d : hits) {
+                    matched.add(d.getPK());
+                }
+                assertTrue(matched.contains("pk_0"), "jieba must match 数据库 in pk_0, got " + matched);
+                assertFalse(matched.contains("pk_1"), "pk_1 has no 数据库");
+                assertFalse(matched.contains("pk_2"), "pk_2 is ascii only");
+            } finally {
+                Doc.freeDocs(hits);
+            }
+
+            List<Doc> other = ftsQuery(coll, "分布式");
+            try {
+                Set<String> matched = new HashSet<>();
+                for (Doc d : other) {
+                    matched.add(d.getPK());
+                }
+                assertTrue(matched.contains("pk_1"), "jieba must match 分布式 in pk_1, got " + matched);
+                assertFalse(matched.contains("pk_0"), "pk_0 has no 分布式");
+            } finally {
+                Doc.freeDocs(other);
+            }
+
+            List<Doc> none = ftsQuery(coll, "不存在的词语");
+            try {
+                assertTrue(none.isEmpty(), "a term in no document should return empty");
+            } finally {
+                Doc.freeDocs(none);
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ Hybrid vector + FTS
 
     @Test

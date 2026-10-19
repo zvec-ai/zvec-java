@@ -11,9 +11,10 @@ project, licensed under the Apache License, Version 2.0. Redistributing them
 means carrying zvec's own attribution notices along, so zvec/NOTICE is
 reproduced verbatim below, as required by section 4(d) of the Apache License.
 
-The JAR also bundles two cppjieba dictionary files under zvec/jieba_dict/
-(jieba.dict.utf8 and hmm_model.utf8), from https://github.com/yanyiwu/cppjieba,
-Copyright (c) 2013, licensed under the MIT License.
+The native libraries embed the default cppjieba dictionary and HMM model
+(jieba.dict.utf8 and hmm_model.utf8, LZ4-compressed and decompressed in memory
+on first use), from https://github.com/yanyiwu/cppjieba, Copyright (c) 2013,
+licensed under the MIT License.
 
 At runtime this library depends on JavaCPP (org.bytedeco:javacpp), which is
 triple-licensed Apache-2.0 OR GPL-2.0-or-later OR GPL-2.0-with-classpath-

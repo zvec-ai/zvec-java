@@ -66,10 +66,6 @@
         <zvec.home>${project.basedir}/zvec</zvec.home>
         <zvec.include.path>${zvec.home}/src/include</zvec.include.path>
         <zvec.lib.path>${zvec.home}/build/lib</zvec.lib.path>
-        <!-- cppjieba dictionary bundled with the JAR so the `jieba` FTS
-             tokenizer works out of the box (mirrors the zvec SDK layout,
-             which ships the same files under data/jieba_dict). -->
-        <zvec.jieba.dict.path>${zvec.home}/thirdparty/cppjieba/cppjieba-5.6.7/dict</zvec.jieba.dict.path>
 
         <!-- Auto-detected build platform (e.g. macosx-arm64, linux-x86_64, windows-x86_64) -->
         <javacpp.platform>${os.name}-${os.arch}</javacpp.platform>
@@ -122,20 +118,6 @@
                 <includes>
                     <include>LICENSE</include>
                     <include>NOTICE</include>
-                </includes>
-            </resource>
-            <!-- Bundle the cppjieba dictionary files from the zvec submodule
-                 into the JAR (zvec/jieba_dict/). At runtime Zvec.initialize()
-                 extracts them to a cache directory and registers the dir via
-                 zvec_set_default_jieba_dict_dir(). maven-resources-plugin
-                 silently skips this entry when the directory is absent (e.g.
-                 vendor-mode builds without the submodule). -->
-            <resource>
-                <directory>${zvec.jieba.dict.path}</directory>
-                <targetPath>zvec/jieba_dict</targetPath>
-                <includes>
-                    <include>jieba.dict.utf8</include>
-                    <include>hmm_model.utf8</include>
                 </includes>
             </resource>
         </resources>
@@ -337,9 +319,8 @@
                         <version>3.4.0</version>
                         <configuration>
                             <!-- The publish pipeline stages every platform's
-                                 natives into src/main/resources, and the
-                                 jieba dictionary is a resource as well. The
-                                 source plugin sweeps resource directories into
+                                 natives into src/main/resources. The source
+                                 plugin sweeps resource directories into
                                  -sources.jar too, which would publish ~120 MB
                                  of binaries that are already inside the main
                                  and classifier JARs. A sources JAR should
@@ -418,8 +399,8 @@
 
         <!-- Extra classifier artifacts (same layout family as
              org.duckdb:duckdb_jdbc): one JAR per platform (classes +
-             jieba dict + that platform's natives only) and a nolib JAR
-             (classes + dict, no natives). Requires every supported platform's
+             that platform's natives only) and a nolib JAR (classes, no
+             natives). Requires every supported platform's
              native bundle to be staged, which is only the case in the
              publish-jar CI job; the script fails loudly otherwise. -->
         <profile>

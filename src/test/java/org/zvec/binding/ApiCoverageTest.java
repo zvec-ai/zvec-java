@@ -3,7 +3,6 @@ package org.zvec.binding;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
@@ -16,7 +15,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Strong-assertion coverage for the wider zvec C API surface: enum codes,
  * index and query parameters (DiskANN, IVF-RaBitQ, Vamana, FTS), full-text and
  * multi-query wrappers, the collection document iterator, I/O backend
- * introspection and the bundled jieba dictionary.
+ * introspection and the data type mapping.
  *
  * <p>Complements {@link ZvecTest} and the DML/DQL suites. Everything here is
  * either a parameter round-trip against a native handle or an end-to-end
@@ -52,12 +51,26 @@ class ApiCoverageTest extends TestSupport {
         assertEquals(0, IoBackendType.PREAD.getCode());
         assertEquals(1, IoBackendType.LIBAIO.getCode());
         assertEquals(2, IoBackendType.IO_URING.getCode());
+        assertEquals(3, IoBackendType.WINDOWS_OVERLAPPED.getCode());
 
         assertEquals(IoBackendType.PREAD, IoBackendType.fromCode(0));
         assertEquals(IoBackendType.LIBAIO, IoBackendType.fromCode(1));
         assertEquals(IoBackendType.IO_URING, IoBackendType.fromCode(2));
+        assertEquals(IoBackendType.WINDOWS_OVERLAPPED, IoBackendType.fromCode(3));
         assertEquals(IoBackendType.PREAD, IoBackendType.fromCode(42),
                 "unknown codes fall back to pread");
+    }
+
+    @Test
+    void testVectorUint8DataTypeCode() {
+        // Added with zvec's configurable refine/flat storage types: the C API
+        // gained the constant, so the enum has to carry the same code and the
+        // native name mapping has to know it.
+        assertEquals(28, DataType.VECTOR_UINT8.getCode());
+        assertEquals(DataType.VECTOR_UINT8, DataType.fromCode(28));
+        assertEquals(DataType.UNDEFINED, DataType.fromCode(29),
+                "29 is not a data type");
+        assertEquals("VECTOR_UINT8", DataType.VECTOR_UINT8.toStringName());
     }
 
     @Test
@@ -124,11 +137,15 @@ class ApiCoverageTest extends TestSupport {
         try (IndexParams p = IndexParams.createVamana(
                 MetricType.L2, 32, 100, 1.2f, false, false)) {
             assertEquals(IndexType.VAMANA, p.getType());
-            assertFalse(p.getVamanaTwoPassBuild(), "two-pass build defaults to off");
-            p.setVamanaTwoPassBuild(true);
-            assertTrue(p.getVamanaTwoPassBuild());
+            // createVamana() does not pass the flag, so this reads back the
+            // native default - which zvec flipped to on in v0.8.0 (#761, fast
+            // query over dense read-only collections). Asserting it keeps the
+            // binding honest if upstream flips it again.
+            assertTrue(p.getVamanaTwoPassBuild(), "two-pass build defaults to on");
             p.setVamanaTwoPassBuild(false);
             assertFalse(p.getVamanaTwoPassBuild());
+            p.setVamanaTwoPassBuild(true);
+            assertTrue(p.getVamanaTwoPassBuild());
         }
     }
 
@@ -563,46 +580,13 @@ class ApiCoverageTest extends TestSupport {
         IoBackendType type = Zvec.getIoBackendType();
         assertNotNull(type);
         String name = type.getName();
-        assertTrue(name.equals("pread") || name.equals("libaio") || name.equals("io_uring"),
+        assertTrue(name.equals("pread") || name.equals("libaio") || name.equals("io_uring")
+                        || name.equals("windows_overlapped"),
                 "unexpected backend name: " + name);
         assertEquals(name, Zvec.getIoBackendTypeName(type),
                 "the enum accessor and the static helper must agree");
         String description = Zvec.getIoBackendDescription();
         assertNotNull(description);
         assertFalse(description.isEmpty(), "backend description must not be empty");
-    }
-
-    // =========================================================================
-    // Bundled jieba dict
-    // =========================================================================
-
-    @Test
-    void testBundledJiebaDict() {
-        // TestSupport.initLibrary() -> Zvec.initialize(null) auto-registers the
-        // bundled dict as the process-wide default.
-        assertTrue(Zvec.isJiebaDictAvailable(), "a jieba dict source must be configured");
-
-        String dir = Zvec.getDefaultJiebaDictDir();
-        assertNotNull(dir);
-        assertFalse(dir.isEmpty(), "the bundled dict should be auto-registered at initialize");
-
-        for (String f : new String[]{"jieba.dict.utf8", "hmm_model.utf8"}) {
-            File file = new File(dir, f);
-            assertTrue(file.isFile(), "missing dict file " + file);
-            assertTrue(file.length() > 0, "empty dict file " + file);
-        }
-
-        // useBundledJiebaDict() is idempotent and reports the same directory.
-        assertEquals(dir, Zvec.useBundledJiebaDict());
-    }
-
-    @Test
-    void testConfigDataJiebaDictDir() {
-        try (ConfigData cfg = new ConfigData()) {
-            cfg.setJiebaDictDir("/tmp/some-dict-dir");
-            assertEquals("/tmp/some-dict-dir", cfg.getJiebaDictDir());
-            cfg.setJiebaDictDir("");
-            assertEquals("", cfg.getJiebaDictDir());
-        }
     }
 }

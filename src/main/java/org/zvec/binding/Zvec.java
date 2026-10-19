@@ -62,7 +62,7 @@ public final class Zvec {
     /**
      * Get the I/O backend used for DiskAnn disk reads. On Linux zvec selects
      * the first usable backend in this order: io_uring, libaio, pread;
-     * macOS uses pread.
+     * macOS uses pread; Windows uses unbuffered overlapped I/O.
      */
     public static IoBackendType getIoBackendType() {
         return IoBackendType.fromCode(ZvecNative.zvec_get_io_backend_type());
@@ -82,106 +82,23 @@ public final class Zvec {
     }
 
     // =========================================================================
-    // Jieba FTS dictionary
-    // =========================================================================
-
-    /**
-     * Set the process-wide default jieba dictionary directory (a directory
-     * containing {@code jieba.dict.utf8} and {@code hmm_model.utf8}).
-     * Per-field {@code extra_params.jieba_dict_dir} and the
-     * {@code ZVEC_JIEBA_DICT_DIR} environment variable take precedence.
-     */
-    public static void setDefaultJiebaDictDir(String dir) {
-        ZvecNative.zvec_set_default_jieba_dict_dir(NativeSupport.utf8(dir));
-    }
-
-    /** Get the process-wide default jieba dictionary directory. */
-    public static String getDefaultJiebaDictDir() {
-        return NativeSupport.string(ZvecNative.zvec_get_default_jieba_dict_dir());
-    }
-
-    /**
-     * Extract the jieba dictionary files bundled in this JAR (under
-     * {@code zvec/jieba_dict/}) into a stable cache directory and register
-     * that directory as the process-wide default. Idempotent.
-     *
-     * @return the directory holding the dictionary files
-     * @throws ZvecException when the JAR does not bundle the dictionary
-     */
-    public static String useBundledJiebaDict() {
-        if (!JiebaDictSupport.isBundledDictAvailable()) {
-            throw new ZvecException(ErrorCode.INVALID_ARGUMENT,
-                    "no bundled jieba dict found on the classpath (expected zvec/jieba_dict/jieba.dict.utf8)");
-        }
-        String dir = JiebaDictSupport.extractBundledDict();
-        setDefaultJiebaDictDir(dir);
-        return dir;
-    }
-
-    /**
-     * Returns true when a jieba dictionary source is configured: a
-     * process-wide default, the {@code ZVEC_JIEBA_DICT_DIR} environment
-     * variable, or the dictionary bundled in this JAR.
-     */
-    public static boolean isJiebaDictAvailable() {
-        String def = getDefaultJiebaDictDir();
-        if (def != null && !def.isEmpty()) {
-            return true;
-        }
-        String env = System.getenv("ZVEC_JIEBA_DICT_DIR");
-        if (env != null && !env.trim().isEmpty()) {
-            return true;
-        }
-        return JiebaDictSupport.isBundledDictAvailable();
-    }
-
-    // =========================================================================
     // Lifecycle
     // =========================================================================
 
     /**
      * Initialize the Zvec library.  Pass {@code null} for default config.
      *
-     * <p>When no jieba dictionary source is configured (neither in
-     * {@code config}, nor via {@code ZVEC_JIEBA_DICT_DIR}, nor via
-     * {@link #setDefaultJiebaDictDir}), the dictionary bundled in the JAR is
-     * automatically extracted and registered so the {@code jieba} FTS
-     * tokenizer works out of the box.
+     * <p>The {@code jieba} FTS tokenizer needs no setup: its default dictionary
+     * and HMM model are embedded in the native library (zvec &ge; v0.8.0), so
+     * there is nothing to extract or register. An external dictionary can still
+     * be selected per field through the analyzer's
+     * {@code extra_params.jieba_dict_dir}, or process-wide through the
+     * {@code ZVEC_JIEBA_DICT_DIR} environment variable; the per-field value
+     * wins over the environment, which wins over the embedded default.
      */
     public static void initialize(ConfigData config) {
-        ensureJiebaDictConfigured(config);
         zvec_config_data_t configPtr = (config != null) ? config.getHandle() : null;
         ZvecException.throwIfError(ZvecNative.zvec_initialize(configPtr));
-    }
-
-    private static void ensureJiebaDictConfigured(ConfigData config) {
-        if (config != null) {
-            String dir = config.getJiebaDictDir();
-            if (dir != null && !dir.isEmpty()) {
-                return; // explicitly configured by the caller
-            }
-        }
-        String env = System.getenv("ZVEC_JIEBA_DICT_DIR");
-        if (env != null && !env.trim().isEmpty()) {
-            return; // resolved by the native tokenizer from the environment
-        }
-        String def = getDefaultJiebaDictDir();
-        if (def != null && !def.isEmpty()) {
-            return; // process-wide default already registered
-        }
-        if (JiebaDictSupport.isBundledDictAvailable()) {
-            try {
-                useBundledJiebaDict();
-            } catch (RuntimeException e) {
-                // Dictionary setup is a convenience: never let it break
-                // initialization (e.g. read-only home/tmp on locked-down
-                // hosts). Users of the jieba FTS tokenizer can still point
-                // zvec at a dictionary via ConfigData.setJiebaDictDir(),
-                // Zvec.setDefaultJiebaDictDir() or ZVEC_JIEBA_DICT_DIR.
-                System.err.println("[zvec-java] bundled jieba dict not activated: "
-                        + e.getMessage());
-            }
-        }
     }
 
     /** Shutdown the Zvec library and release all global resources. */
