@@ -82,8 +82,11 @@ implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 Supported platforms: macOS ARM64, Linux x86_64, Linux ARM64 and Windows x86_64.
 The Linux native libraries are built in the `manylinux_2_28` images and need
 glibc 2.27 or newer, so Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ and Fedora
-28+ are all covered. Per-index platform availability still follows zvec itself
-(see [Features](#features)).
+28+ are all covered. The macOS ARM64 libraries carry an 11.0 deployment target
+as of 0.8.0, so macOS 11 (Big Sur) and later are covered; **the published 0.7.0
+macOS libraries were built without one and therefore load only on macOS 15 or
+newer.** Per-index platform availability still follows zvec itself (see
+[Features](#features)).
 
 From here, jump to [Code Examples](#code-examples) — `Zvec.initialize(null)` is
 the only setup call you need.

@@ -73,7 +73,7 @@ implementation 'org.zvec:zvec-java:0.7.0'
 implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 ```
 
-受支持平台:macOS ARM64、Linux x86_64、Linux ARM64、Windows x86_64。Linux 原生库在 `manylinux_2_28` 镜像中构建,要求 glibc 2.27 及以上,因此 Ubuntu 18.04+、Debian 10+、RHEL/CentOS 8+、Fedora 28+ 均可使用。各类索引的平台可用性仍与 zvec 本身一致(见[特性](#特性))。
+受支持平台:macOS ARM64、Linux x86_64、Linux ARM64、Windows x86_64。Linux 原生库在 `manylinux_2_28` 镜像中构建,要求 glibc 2.27 及以上,因此 Ubuntu 18.04+、Debian 10+、RHEL/CentOS 8+、Fedora 28+ 均可使用。macOS ARM64 原生库从 0.8.0 起以 11.0 为部署目标,即 macOS 11(Big Sur)及以上均可使用;**已发布的 0.7.0 macOS 原生库构建时没有指定部署目标,因此只能在 macOS 15 及以上加载。**各类索引的平台可用性仍与 zvec 本身一致(见[特性](#特性))。
 
 接下来直接看[代码示例](#代码示例)即可,唯一需要的初始化调用是 `Zvec.initialize(null)`。
 

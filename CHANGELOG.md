@@ -56,6 +56,19 @@ Tracks zvec `v0.8.0-beta` (`c133f20`); the artifact version is
   can simply delete the setup, and `Zvec.initialize()` no longer touches the
   filesystem on their behalf.
 
+### Fixed
+
+- The macOS ARM64 natives are built with an 11.0 deployment target instead of
+  inheriting the macOS version of whatever runner built them. `dyld` refuses to
+  load a dylib whose `LC_BUILD_VERSION` minos is newer than the host, so the
+  0.7.0 artifacts — built on `macos-15` with no target set — load only on
+  macOS 15, and nothing caught it because the smoke test runs on the same
+  runner generation. Both shipped libraries are now pinned: `libzvec_c_api`
+  through `-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0` (the floor upstream zvec builds
+  its own macOS SDK with) and the JavaCPP-built `libjniZvecNative` through a
+  mac-only pom profile, and both release workflows now fail if a staged dylib
+  reports a newer floor.
+
 ## [0.7.0]
 
 First release, cut from the zvec v0.7.0 C API and published to Maven Central as

@@ -478,5 +478,38 @@
                 </plugins>
             </build>
         </profile>
+
+        <!-- macOS deployment target. dyld refuses to load a dylib whose
+             LC_BUILD_VERSION minos is newer than the host macOS, and clang
+             defaults that floor to the version of the machine doing the build -
+             so compiling on a macOS 15 runner quietly produces natives only
+             macOS 15 can load, which is exactly what the 0.7.0 artifacts did.
+             zvec builds its own macOS SDK with a 11.0 floor; match it here for
+             the JNI glue. The workflows pass the matching
+             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 for libzvec_c_api itself. -->
+        <profile>
+            <id>macos-deployment-target</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <properties>
+                <macosx.deployment.target>11.0</macosx.deployment.target>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.bytedeco</groupId>
+                        <artifactId>javacpp</artifactId>
+                        <configuration>
+                            <compilerOptions>
+                                <compilerOption>-mmacosx-version-min=${macosx.deployment.target}</compilerOption>
+                            </compilerOptions>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

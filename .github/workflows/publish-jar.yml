@@ -61,6 +61,10 @@ jobs:
             runner: macos-15
             container: ''
             cache_abi: host
+            # The floor upstream zvec builds its own macOS SDK with. Without it
+            # clang targets the runner's macOS version, and dyld then refuses to
+            # load the dylib on anything older.
+            cmake_platform_args: '-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'
           - name: linux-x64
             runner: ubuntu-24.04
             # Pinned dated tag, the same batch upstream uses.
@@ -184,12 +188,13 @@ jobs:
         shell: bash
         env:
           ZVEC_TAG: ${{ steps.zvec.outputs.tag }}
+          ZVEC_PLATFORM_ARGS: ${{ matrix.cmake_platform_args || '' }}
         run: |
           NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
           cd zvec
           mkdir -p build && cd build
           cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_C_BINDINGS=ON \
-            -DOVERRIDE_GIT_DESCRIBE="$ZVEC_TAG" -G Ninja
+            -DOVERRIDE_GIT_DESCRIBE="$ZVEC_TAG" $ZVEC_PLATFORM_ARGS -G Ninja
           cmake --build . -j$NPROC --target zvec_c_api
           touch .zvec-build-ok
 
@@ -311,6 +316,30 @@ jobs:
           fi
           echo "=== Staged native bundle ($PLATNAME) ==="
           ls -la "staging/$PLATNAME/"
+
+      - name: Verify the macOS natives keep their 11.0 deployment target
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # dyld refuses to load a dylib whose LC_BUILD_VERSION minos is newer
+          # than the host macOS, and clang defaults that floor to the version of
+          # the machine doing the build. The 0.7.0 artifacts were built on
+          # macos-15 with no deployment target, so they only load on macOS 15 -
+          # and nothing complained, because every check in this workflow runs on
+          # the same runner generation. Both libraries that ship in the JAR have
+          # to be covered: libzvec_c_api takes its floor from
+          # CMAKE_OSX_DEPLOYMENT_TARGET above, the JavaCPP-built
+          # libjniZvecNative from the macos-deployment-target profile in
+          # pom.xml. Raise LIMIT and the README floor together.
+          LIMIT=11
+          for lib in staging/*/*.dylib; do
+            MINOS=$(otool -l "$lib" | awk '/LC_BUILD_VERSION/{f=1} f && $1=="minos"{print $2; exit}')
+            echo "$lib: LC_BUILD_VERSION minos = ${MINOS:-none}"
+            if [ -z "$MINOS" ] || [ "${MINOS%%.*}" -gt "$LIMIT" ]; then
+              echo "::error::$lib targets macOS ${MINOS:-unknown} but the documented floor is macOS $LIMIT.0"
+              exit 1
+            fi
+          done
 
       - name: Upload native bundle
         uses: actions/upload-artifact@v7
