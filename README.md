@@ -171,7 +171,7 @@ The packaged fat JAR **already embeds the native library for the current platfor
 
 ```bash
 mvn package -DskipTests
-java -jar target/zvec-java-0.7.0-with-dependencies.jar
+java -jar target/zvec-java-0.8.0-SNAPSHOT-with-dependencies.jar
 ```
 
 ### Smoke-test a built artifact
@@ -183,7 +183,7 @@ and jieba full-text search. It needs a JDK and nothing else — no Docker, no
 Maven, no zvec checkout.
 
 ```bash
-scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar
+scripts/smoke-test.sh --jar target/zvec-java-0.8.0-SNAPSHOT.jar
 
 # Or resolve the JAR out of a Maven-layout directory, e.g. a Central Portal
 # deployment bundle downloaded before publishing it

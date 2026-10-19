@@ -15,11 +15,11 @@
 # to prove the shipped .so files really load there.
 #
 # Usage:
-#   scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar
+#   scripts/smoke-test.sh --jar target/zvec-java-0.8.0-SNAPSHOT.jar
 #   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0
 #   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0 --classifier linux-arm64
 #   scripts/smoke-test.sh --jar zvec-java-0.7.0-nolib.jar --lib-dir /opt/zvec/lib
-#   scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar --expect-version v0.7.0
+#   scripts/smoke-test.sh --jar target/zvec-java-0.8.0-SNAPSHOT.jar --expect-version v0.8.0-beta
 #
 # Options:
 #   --jar PATH         the zvec-java JAR to test
@@ -157,7 +157,7 @@ javac -encoding UTF-8 -cp "$CP" -d "$WORK/classes" "$SOURCE"
 
 JAVA_OPTS=(-Dfile.encoding=UTF-8)
 if [ -n "$EXPECT_VERSION" ]; then
-  # Accept a bare 0.7.0 as well as v0.7.0; the library itself reports the v.
+  # Accept a bare X.Y.Z as well as vX.Y.Z; the library itself reports the v.
   case "$EXPECT_VERSION" in v*) ;; *) EXPECT_VERSION="v$EXPECT_VERSION" ;; esac
   JAVA_OPTS+=("-Dzvec.smoke.expectVersion=$EXPECT_VERSION")
 fi

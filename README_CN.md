@@ -153,7 +153,7 @@ mvn test -Dzvec.home=/path/to/zvec
 
 ```bash
 mvn package -DskipTests
-java -jar target/zvec-java-0.7.0-with-dependencies.jar
+java -jar target/zvec-java-0.8.0-SNAPSHOT-with-dependencies.jar
 ```
 
 ### 对构建产物做冒烟测试
@@ -164,7 +164,7 @@ JavaCPP 从 JAR 中解压出当前平台的原生库,然后真实地创建一个
 Maven、也不需要 zvec 源码。
 
 ```bash
-scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar
+scripts/smoke-test.sh --jar target/zvec-java-0.8.0-SNAPSHOT.jar
 
 # 也可以从 Maven 目录布局中解析 JAR,例如发布前从 Central Portal 下载的
 # deployment bundle

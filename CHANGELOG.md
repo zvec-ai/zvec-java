@@ -7,6 +7,9 @@ zvec `v0.7.0`. A binding-only fix bumps the third segment.
 
 ## [Unreleased]
 
+Tracks zvec `v0.8.0-beta` (`c133f20`); the artifact version is
+`0.8.0-SNAPSHOT` until the release is cut.
+
 ### Added
 
 - `DataType.VECTOR_UINT8` (28) and `IoBackendType.WINDOWS_OVERLAPPED` (3),

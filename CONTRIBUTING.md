@@ -39,7 +39,7 @@ Point Maven at an existing zvec checkout instead of the submodule with
 `-Dzvec.lib.path=/path/to/build/lib`.
 
 To check an already-built artifact the way a consumer resolves it, run
-`scripts/smoke-test.sh --jar target/zvec-java-0.7.0.jar` (needs a JDK only).
+`scripts/smoke-test.sh --jar target/zvec-java-<version>.jar` (needs a JDK only).
 
 Checkstyle is deliberately narrow — it only flags things that are actual bugs
 (a `switch` that falls through, `equals()` without `hashCode()`, a string
