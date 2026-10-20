@@ -122,8 +122,8 @@ straight to [Code Examples](#code-examples).
 
 The Zvec core is included as a **git submodule** at `./zvec`:
 
-> **Version requirement**: the submodule is pinned to **zvec v0.8.0-beta**
-> (`c133f20`). Relative to v0.7.0 the C API drops the four jieba
+> **Version requirement**: the submodule is pinned to **zvec v0.8.0-beta2**
+> (`8397071`). Relative to v0.7.0 the C API drops the four jieba
 > dictionary-directory entry points — the default dictionary and HMM model are
 > now compiled into `libzvec_c_api` — and adds `ZVEC_DATA_TYPE_VECTOR_UINT8`
 > plus the Windows overlapped-I/O backend; the bindings follow both. Everything

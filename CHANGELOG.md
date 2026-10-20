@@ -7,7 +7,7 @@ zvec `v0.7.0`. A binding-only fix bumps the third segment.
 
 ## [Unreleased]
 
-Tracks zvec `v0.8.0-beta` (`c133f20`); the artifact version is
+Tracks zvec `v0.8.0-beta2` (`8397071`); the artifact version is
 `0.8.0-SNAPSHOT` until the release is cut.
 
 ### Added
@@ -45,9 +45,21 @@ Tracks zvec `v0.8.0-beta` (`c133f20`); the artifact version is
 
 ### Changed
 
-- The `zvec` submodule moved from `v0.7.0` to `v0.8.0-beta`. The native
-  libraries report `v0.8.0-beta`, so `Zvec.getVersionMajor/Minor/Patch()`
-  return 0.8.0.
+- The `zvec` submodule moved from `v0.7.0` to `v0.8.0-beta2`. The native
+  libraries report `v0.8.0-beta2`, so `Zvec.getVersion()` returns that string
+  while `getVersionMajor/Minor/Patch()` still return 0.8.0 - zvec's
+  `cmake/version.cmake` reads only the leading `vX.Y.Z`, so a beta suffix
+  never reaches the numeric components.
+- The `v0.8.0-beta` to `v0.8.0-beta2` part of that move needed no binding,
+  gating or licensing work: `src/include/zvec/c_api.h` (the header JavaCPP
+  parses), the top-level `CMakeLists.txt` and `cmake/` (where the DiskAnn and
+  RaBitQ platform gates live), and `NOTICE` are all unchanged between the two.
+  What the four upstream commits do carry is internal - index storage reads
+  migrated to `MemoryBlock` (#812), flat-index query metadata isolated from
+  segment-cache locking (#825), and a fix for FLOAT and DOUBLE bounds in a
+  forward filter (#818), where the bound was round-tripped through a
+  six-decimal string and could therefore be compared against a slightly
+  different number than the caller asked for.
 - This project no longer ships or registers the jieba FTS dictionary. zvec
   v0.8.0 compiles cppjieba's default dictionary and HMM model into
   `libzvec_c_api` (LZ4-compressed, decompressed in memory on first use), so

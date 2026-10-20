@@ -100,7 +100,7 @@ implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 
 Zvec 核心以 **git submodule** 形式引入到 `./zvec`:
 
-> **版本要求**:子模块当前指向 **zvec v0.8.0-beta**(`c133f20`)。相对 v0.7.0,C API
+> **版本要求**:子模块当前指向 **zvec v0.8.0-beta2**(`8397071`)。相对 v0.7.0,C API
 > 删掉了 4 个 jieba 词表目录相关入口 —— 默认词表与 HMM 模型现在直接编译进
 > `libzvec_c_api` —— 并新增了 `ZVEC_DATA_TYPE_VECTOR_UINT8` 与 Windows overlapped I/O
 > 后端,绑定层都已跟进。v0.7.0 引入的能力(DiskANN / IVF-RaBitQ 索引与查询参数、
