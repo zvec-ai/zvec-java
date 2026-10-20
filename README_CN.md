@@ -307,7 +307,7 @@ IndexParams invert = IndexParams.createInvert(true, false); // 倒排,用于文�
 
 | 依赖 | 版本 | 用途 | 许可证 |
 |------|------|------|--------|
-| `org.bytedeco:javacpp` | 1.5.11 | JNI 代码生成 + 跨平台原生库加载 | Apache-2.0 **或** GPL-2.0-or-later **或** GPL-2.0-with-classpath-exception；本项目按 Apache-2.0 使用 |
+| `org.bytedeco:javacpp` | 1.5.14 | JNI 代码生成 + 跨平台原生库加载 | Apache-2.0 **或** GPL-2.0-or-later **或** GPL-2.0-with-classpath-exception；本项目按 Apache-2.0 使用 |
 | `org.junit.jupiter:junit-jupiter` | 5.10.2 | 单元测试(仅 test scope)| EPL-2.0 |
 
 ## 架构
@@ -389,7 +389,7 @@ Zvec C API 未提供文档级校验函数(`zvec_doc_validate` 不存在),该方�
 
 ### 第三方许可证说明
 
-- **JavaCPP** (`org.bytedeco:javacpp:1.5.11`) 采用三重许可证:
+- **JavaCPP** (`org.bytedeco:javacpp:1.5.14`) 采用三重许可证:
   `Apache-2.0 或 GPL-2.0-or-later 或 GPL-2.0-with-classpath-exception`。
   本项目按 **Apache-2.0** 条款使用 JavaCPP。
 - **JUnit 5** 仅在 `test` scope 中使用,许可证为 EPL-2.0,不会被打入发布的 JAR。

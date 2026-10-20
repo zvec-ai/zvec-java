@@ -65,6 +65,19 @@ Tracks zvec `v0.8.0-beta` (`c133f20`); the artifact version is
   C library archives, mirroring the same removal in zvec's own packaging; the
   `Publish JAR` workflow now fails if dictionary resources reappear inside a
   JAR.
+- JavaCPP moved from 1.5.11 to 1.5.14, which is what makes the new
+  `windows-arm64` platform buildable at all. 1.5.11 has no
+  `windows-arm64.properties`, so on a Windows on ARM runner it fell back to the
+  generic GCC command line - `g++ ... -shared -o libjniZvecNative.so` - and the
+  x86_64 MinGW `ld` the runner ships then died on our ARM64 import library with
+  `unhandled machine type (0xaa64)`. 1.5.13 added the platform (pull #813) with
+  the same `cl` / `.dll` settings `windows-x86_64` uses. The license is
+  unchanged - still `Apache-2.0 OR GPL-2.0-or-later OR
+  GPL-2.0-with-classpath-exception`, still used under Apache-2.0 - and the
+  generated `ZvecNative.java` is byte-identical apart from its version header,
+  so nothing downstream of the parser moved. As a side effect the JNI glue no
+  longer warns about `std::char_traits<unsigned short>`, which 1.5.12 replaced
+  with `char16_t` and which libstdc++ has scheduled for removal.
 
 ### Removed
 

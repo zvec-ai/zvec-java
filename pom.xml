@@ -61,7 +61,11 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <javacpp.version>1.5.11</javacpp.version>
+        <!-- 1.5.13 is the floor: it is the first release with a
+             windows-arm64.properties, i.e. the first that compiles the JNI glue
+             for Windows on ARM with MSVC instead of falling back to MinGW g++.
+             Keep in sync with the version quoted in both READMEs. -->
+        <javacpp.version>1.5.14</javacpp.version>
         <junit.version>5.10.2</junit.version>
 
         <!-- Location of the Zvec core (git submodule at ./zvec). Override for local
@@ -81,7 +85,7 @@
     <dependencies>
         <!--
             JavaCPP: JNI code generation + cross-platform native loading.
-            JavaCPP 1.5.11 is triple-licensed (Apache-2.0 OR GPL-2.0-or-later OR
+            JavaCPP is triple-licensed (Apache-2.0 OR GPL-2.0-or-later OR
             GPL-2.0-with-classpath-exception). This project uses it under the
             Apache-2.0 terms, which is compatible with the project license.
         -->
