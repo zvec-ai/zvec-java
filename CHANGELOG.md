@@ -19,6 +19,29 @@ Tracks zvec `v0.8.0-beta` (`c133f20`); the artifact version is
 - `SearchIntegrationTest.testJiebaFtsOnEmbeddedDict`: a Chinese full-text
   search that configures no dictionary anywhere, which is what proves the
   native library's embedded default dictionary actually works.
+- Two more platforms in the artifact family: `macosx-x86_64` (Intel macOS) and
+  `windows-arm64` (native Windows on ARM), the two SDK targets upstream zvec
+  added to its own CI in `_build_macos_x64_sdk.yml` and the
+  `aarch64-pc-windows-msvc` leg of `_build_prebuilt.yml`. Each gets a
+  classifier JAR, a prebuilt C library archive on the GitHub Release, and a
+  `source-test` CI leg that runs the whole suite against natives built on that
+  platform - built on the same runners upstream uses, `macos-15-intel` and
+  `windows-11-arm`. Both platforms ship a reduced index set, because zvec
+  compiles DiskAnn for Linux/macOS-arm64/Windows-x86_64 only and IVF-RaBitQ for
+  Linux x86_64 and Windows x86_64 only; the READMEs now say so.
+- Architecture guards in both publish workflows, next to the existing glibc and
+  macOS deployment-target checks: `lipo -archs` for every staged dylib and the
+  COFF `Machine` field for every staged DLL. Without them a toolchain left at
+  its default - an `msvc-dev-cmd` without `arch: arm64`, or a
+  `CMAKE_OSX_ARCHITECTURES` that never reached the compiler - ships an x86_64
+  binary under the ARM64 classifier, and the consumer only finds out when the
+  library fails to load.
+- A JavaCPP platform-name guard on every `build-natives` leg: the directory
+  javacpp emits has to equal the classifier the matrix declares for that leg.
+  The aggregation job copies platform directories by name alone, so a leg whose
+  JVM resolved a different platform - an x86_64 JVM under emulation on
+  `windows-11-arm`, for instance - used to overwrite a sibling leg's bundle and
+  only surfaced later as a missing classifier in `build-jar`.
 
 ### Changed
 
@@ -58,16 +81,23 @@ Tracks zvec `v0.8.0-beta` (`c133f20`); the artifact version is
 
 ### Fixed
 
-- The macOS ARM64 natives are built with an 11.0 deployment target instead of
-  inheriting the macOS version of whatever runner built them. `dyld` refuses to
-  load a dylib whose `LC_BUILD_VERSION` minos is newer than the host, so the
-  0.7.0 artifacts — built on `macos-15` with no target set — load only on
-  macOS 15, and nothing caught it because the smoke test runs on the same
-  runner generation. Both shipped libraries are now pinned: `libzvec_c_api`
-  through `-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0` (the floor upstream zvec builds
-  its own macOS SDK with) and the JavaCPP-built `libjniZvecNative` through a
-  mac-only pom profile, and both release workflows now fail if a staged dylib
-  reports a newer floor.
+- The macOS natives — both architectures now — are built with an 11.0
+  deployment target instead of inheriting the macOS version of whatever runner
+  built them. `dyld` refuses to load a dylib whose `LC_BUILD_VERSION` minos is
+  newer than the host, so the 0.7.0 artifacts — built on `macos-15` with no
+  target set — load only on macOS 15, and nothing caught it because the smoke
+  test runs on the same runner generation. Both shipped libraries are pinned:
+  `libzvec_c_api` through `-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0` (the floor
+  upstream zvec builds its own macOS SDK with) and the JavaCPP-built
+  `libjniZvecNative` through a mac-only pom profile, and both release workflows
+  now fail if a staged dylib reports a newer floor.
+- `isDiskAnnSupported()` in the test suite counts Windows x86_64 as supported,
+  which it is as of zvec v0.8.0: that release added the overlapped-I/O backend
+  (`ZVEC_IO_BACKEND_TYPE_WINDOWS_OVERLAPPED`) DiskAnn reads through there. The
+  gate mirrored v0.7.0, where DiskAnn was Linux and macOS-arm64 only, so the
+  end-to-end DiskANN test skipped on the `windows-x64` leg instead of running.
+  It now runs, and the two platforms zvec really does stub out — macOS x86_64
+  and Windows arm64 — keep skipping it.
 
 ## [0.7.0]
 

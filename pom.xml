@@ -451,6 +451,11 @@
                                             <type>jar</type>
                                         </artifact>
                                         <artifact>
+                                            <file>${project.build.directory}/zvec-java-${project.version}-macosx-x86_64.jar</file>
+                                            <classifier>macosx-x86_64</classifier>
+                                            <type>jar</type>
+                                        </artifact>
+                                        <artifact>
                                             <file>${project.build.directory}/zvec-java-${project.version}-linux-x86_64.jar</file>
                                             <classifier>linux-x86_64</classifier>
                                             <type>jar</type>
@@ -463,6 +468,11 @@
                                         <artifact>
                                             <file>${project.build.directory}/zvec-java-${project.version}-windows-x86_64.jar</file>
                                             <classifier>windows-x86_64</classifier>
+                                            <type>jar</type>
+                                        </artifact>
+                                        <artifact>
+                                            <file>${project.build.directory}/zvec-java-${project.version}-windows-arm64.jar</file>
+                                            <classifier>windows-arm64</classifier>
                                             <type>jar</type>
                                         </artifact>
                                         <artifact>

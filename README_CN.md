@@ -15,7 +15,7 @@
 - **跨平台开箱即用**:原生库(`libzvec_c_api` + `libjniZvecNative`)按 `平台-架构` 目录打进 JAR,运行时零配置自动加载
 - **高层包装类**:在生成的 `ZvecNative` 之上提供类型安全、资源安全的 Java 对象
 - **AutoCloseable 资源管理**:所有持有原生资源的对象均实现 `AutoCloseable`,支持 try-with-resources
-- **丰富的索引支持**:HNSW、IVF、Flat、Invert(倒排)、Vamana、DiskANN、IVF-RaBitQ(zvec ≥ v0.7.0)及量化变体(FP16/INT8/INT4/RaBitQ)。平台可用性与 zvec 本体一致:DiskANN 需要 Linux x86_64/ARM64 或 macOS ARM64,IVF-RaBitQ 需要 Linux x86_64,其他平台原生层返回 `NotSupported`
+- **丰富的索引支持**:HNSW、IVF、Flat、Invert(倒排)、Vamana、DiskANN、IVF-RaBitQ(zvec ≥ v0.7.0)及量化变体(FP16/INT8/INT4/RaBitQ)。平台可用性与 zvec 本体一致:DiskANN 需要 Linux x86_64/ARM64、macOS ARM64 或 Windows x86_64,IVF-RaBitQ 需要 Linux x86_64 或 Windows x86_64,其余平台(尤其是 macOS Intel 与 Windows ARM64)原生层返回 `NotSupported`
 - **文档迭代器**:支持对集合做快照遍历,可选择输出字段(`Collection.createIterator`,zvec ≥ v0.7.0)
 - **Jieba 全文索引开箱即用**:cppjieba 默认词表与 HMM 模型已编译进原生库(zvec ≥ v0.8.0),`jieba` 分词器无需任何额外配置 —— 不用下载、不用解压、也不用指定路径
 - **多种数据类型**:支持 30 余种字段类型,包括各维度稀疏/稠密向量
@@ -53,9 +53,11 @@ implementation 'org.zvec:zvec-java:0.7.0'
 |------|------|----------|
 | *(不带 classifier)* | classes + **全部**受支持平台的原生库 | 想用一个依赖跑遍所有平台。最省事,体积最大。 |
 | `macosx-arm64` | classes + macOS ARM64 原生库 | 部署平台确定,想要更小的体积。 |
+| `macosx-x86_64` | classes + macOS Intel 原生库 | 同上,Intel Mac。 |
 | `linux-x86_64` | classes + Linux x86_64 原生库 | 同上,Linux x86_64。 |
 | `linux-arm64` | classes + Linux ARM64 原生库 | 同上,Linux ARM64。 |
 | `windows-x86_64` | classes + Windows x86_64 原生库 | 同上,Windows x86_64。 |
+| `windows-arm64` | classes + Windows ARM64 原生库 | 同上,Windows 上的原生 ARM64 JVM。 |
 | `nolib` | classes,**不含**原生库 | 自己编译或分发 `zvec_c_api`,再让加载器指向它(见[原生库如何加载?](#原生库如何加载))。 |
 
 指定单平台 classifier:
@@ -73,7 +75,11 @@ implementation 'org.zvec:zvec-java:0.7.0'
 implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 ```
 
-受支持平台:macOS ARM64、Linux x86_64、Linux ARM64、Windows x86_64。Linux 原生库在 `manylinux_2_28` 镜像中构建,要求 glibc 2.27 及以上,因此 Ubuntu 18.04+、Debian 10+、RHEL/CentOS 8+、Fedora 28+ 均可使用。macOS ARM64 原生库从 0.8.0 起以 11.0 为部署目标,即 macOS 11(Big Sur)及以上均可使用;**已发布的 0.7.0 macOS 原生库构建时没有指定部署目标,因此只能在 macOS 15 及以上加载。**各类索引的平台可用性仍与 zvec 本身一致(见[特性](#特性))。
+受支持平台:macOS ARM64、macOS Intel(x86_64)、Linux x86_64、Linux ARM64、Windows x86_64、Windows ARM64。Linux 原生库在 `manylinux_2_28` 镜像中构建,要求 glibc 2.27 及以上,因此 Ubuntu 18.04+、Debian 10+、RHEL/CentOS 8+、Fedora 28+ 均可使用。两个 macOS 原生库从 0.8.0 起都以 11.0 为部署目标,即 macOS 11(Big Sur)及以上均可使用;**已发布的 0.7.0 macOS 原生库构建时没有指定部署目标,因此只能在 macOS 15 及以上加载。**
+
+有两个平台的索引集合是裁剪过的,因为 zvec 只为[特性](#特性)中列出的架构编译 DiskAnn 与 IVF-RaBitQ:在 macOS Intel 和 Windows ARM64 上,这两种索引都返回 `NotSupported`。其余能力(包括 jieba 全文分词)在全部六个平台上都可用。
+
+在 Windows on ARM 上,以模拟方式运行的 x86_64 JVM 会向 JavaCPP 报告 `windows-x86_64`,因此会选中那个 classifier,同样可用;`windows-arm64` classifier 面向原生 ARM64 JVM。
 
 接下来直接看[代码示例](#代码示例)即可,唯一需要的初始化调用是 `Zvec.initialize(null)`。
 

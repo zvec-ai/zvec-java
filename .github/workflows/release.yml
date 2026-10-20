@@ -44,6 +44,24 @@ jobs:
             # clang targets the runner's macOS version, and dyld then refuses to
             # load the dylib on anything older.
             cmake_platform_args: '-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'
+            mac_arch: arm64
+
+          - name: darwin-x64
+            # Intel macOS. Same runner and same flags upstream zvec uses for its
+            # own osx-amd64 SDK (zvec/.github/workflows/_build_macos_x64_sdk.yml).
+            # Note this platform gets a reduced index set: zvec compiles DiskAnn
+            # only for Darwin/arm64, so macOS x86_64 links the DiskAnn stub.
+            # macos-15-intel is the last x86_64 image GitHub offers for macOS and
+            # is announced to retire in August 2027; this leg has to move to a
+            # self-hosted Intel runner (or be dropped) before then.
+            runner: macos-15-intel
+            platform: darwin_amd64
+            lib_name: libzvec_c_api.dylib
+            artifact_name: zvec-libs-darwin-x64
+            container: ''
+            cache_abi: host
+            cmake_platform_args: '-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'
+            mac_arch: x86_64
 
           - name: linux-x64
             runner: ubuntu-24.04
@@ -70,6 +88,31 @@ jobs:
             artifact_name: zvec-libs-windows-x64
             container: ''
             cache_abi: host
+            msvc_arch: x64
+            # COFF Machine field of the DLL this leg must produce: 8664 = AMD64.
+            pe_machine: '8664'
+
+          - name: windows-arm64
+            # Native Windows on ARM, the runner upstream zvec publishes its
+            # aarch64-pc-windows-msvc SDK from (zvec/_build_prebuilt.yml). The
+            # image ships Maven 3.9.16, an arm64 CPython and an arm64 JDK 21.
+            # Like macOS x86_64 this platform gets a reduced index set: zvec
+            # compiles DiskAnn for Windows x86_64 only, and RaBitQ for Linux
+            # x86_64 and Windows x86_64 only, so Windows arm64 links both stubs.
+            runner: windows-11-arm
+            platform: windows_arm64
+            lib_name: zvec_c_api.dll
+            artifact_name: zvec-libs-windows-arm64
+            container: ''
+            cache_abi: host
+            msvc_arch: arm64
+            # aa64 = ARM64.
+            pe_machine: 'aa64'
+            # Temurin publishes no Windows/aarch64 JDK before 21, so this leg
+            # cannot use the 11 the others do. Only the JVM running Maven
+            # differs; the sources still compile to 1.8 bytecode through
+            # maven.compiler.source/target in pom.xml.
+            java_version: '21'
 
     steps:
       - name: Checkout code
@@ -81,11 +124,11 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           submodules: recursive
 
-      - name: Set up JDK 11
+      - name: Set up JDK ${{ matrix.java_version || '11' }}
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '11'
+          java-version: ${{ matrix.java_version || '11' }}
           cache: maven
 
       # The manylinux image ships no Maven, and the runner's preinstalled
@@ -163,6 +206,10 @@ jobs:
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1 (pinned by SHA; dependabot keeps it current)
+        with:
+          # arm64 on the windows-arm64 leg; the action defaults to x64, which on
+          # an ARM runner would quietly produce an AMD64 library.
+          arch: ${{ matrix.msvc_arch || 'x64' }}
 
       - name: Install CMake and Ninja (Windows)
         if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
@@ -277,6 +324,25 @@ jobs:
             exit 1
           fi
 
+      - name: Verify the macOS library carries this leg's architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # darwin-arm64 and darwin-x64 build side by side and both stage a dylib
+          # under the same file name, so a CMAKE_OSX_ARCHITECTURES that did not
+          # reach the compiler silently ships an Apple Silicon library as the
+          # macOS Intel artifact. Consumers only find out at load time, with
+          # "mach-o file, but is an incompatible architecture". Upstream zvec
+          # asserts the same thing in _build_macos_x64_sdk.yml.
+          DYLIB="staging/${{ matrix.platform }}/${{ matrix.lib_name }}"
+          EXPECT="${{ matrix.mac_arch }}"
+          ARCHS=$(lipo -archs "$DYLIB")
+          echo "$DYLIB: lipo -archs = ${ARCHS:-none} (expect an $EXPECT slice)"
+          if ! printf '%s\n' "$ARCHS" | tr ' ' '\n' | grep -Fxq "$EXPECT"; then
+            echo "::error::$DYLIB has no $EXPECT slice (found: ${ARCHS:-none}) - CMAKE_OSX_ARCHITECTURES did not reach the compiler"
+            exit 1
+          fi
+
       - name: Package libraries (Windows)
         if: runner.os == 'Windows'
         # bash rather than pwsh: the same library is resolved in bash by the
@@ -331,6 +397,30 @@ jobs:
           echo "✓ Copied LICENSE + NOTICE"
 
           ls -la "staging/$PLATFORM/"
+
+      - name: Verify the Windows library carries this leg's architecture
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # windows-x64 and windows-arm64 both stage a zvec_c_api.dll, and an
+          # msvc-dev-cmd left at its x64 default produces an AMD64 DLL on the ARM
+          # runner that no arm64 JVM can load - the same silent-architecture
+          # failure the macOS guard above covers. Read the COFF header instead of
+          # trusting the toolchain: e_lfanew (4-byte little-endian at 0x3C) points
+          # at the PE signature, and the Machine field follows it 4 bytes later
+          # (8664 = AMD64, aa64 = ARM64). od + awk because Git Bash is the only
+          # tool guaranteed on every Windows runner - dumpbin would need the MSVC
+          # environment and objdump is not installed. NR==1 keeps this working on
+          # a BSD od, which prints a trailing blank line GNU od omits.
+          DLL="staging/${{ matrix.platform }}/${{ matrix.lib_name }}"
+          EXPECT="${{ matrix.pe_machine }}"
+          OFF=$(od -An -tu1 -j 60 -N 4 "$DLL" | awk 'NR==1{print $1 + $2*256 + $3*65536 + $4*16777216}')
+          MACH=$(od -An -tu1 -j "$((OFF + 4))" -N 2 "$DLL" | awk 'NR==1{printf "%04x", $1 + $2*256}')
+          echo "$DLL: COFF Machine = 0x${MACH:-?} (expected 0x$EXPECT)"
+          if [ "$MACH" != "$EXPECT" ]; then
+            echo "::error::$DLL is 0x${MACH:-?} but this leg must build 0x$EXPECT - check the msvc-dev-cmd arch input"
+            exit 1
+          fi
 
       # --- License guard ---
       # The archives attached to the GitHub Release carry the same zvec_c_api
@@ -420,8 +510,8 @@ jobs:
           # both terminate the line with CRLF, so `sha256sum -c` reads the file
           # name as "<archive>.zip\r" and reports "FAILED open or read" on the
           # Linux and macOS machines consumers verify on. Write the exact bytes
-          # sha256sum produces for the other three platforms: hash, two spaces,
-          # name, LF.
+          # sha256sum produces on every other platform: hash, two spaces, name,
+          # LF. (Not a count of legs - both Windows legs run this step.)
           $archive = "${{ matrix.artifact_name }}.zip"
           Set-Content -Path "$archive.sha256" -Value "$hash  $archive`n" -NoNewline -Encoding ascii
           Write-Host "=== Archive ==="
@@ -509,9 +599,17 @@ jobs:
           | Platform | Archive | Architecture |
           |----------|---------|--------------|
           | **macOS** | \`zvec-libs-darwin-arm64.tar.gz\` | Apple Silicon (arm64) |
+          | **macOS** | \`zvec-libs-darwin-x64.tar.gz\` | Intel (x86-64) |
           | **Linux** | \`zvec-libs-linux-x64.tar.gz\` | x86-64 |
           | **Linux** | \`zvec-libs-linux-arm64.tar.gz\` | ARM64 (aarch64) |
           | **Windows** | \`zvec-libs-windows-x64.zip\` | x86-64 |
+          | **Windows** | \`zvec-libs-windows-arm64.zip\` | ARM64 |
+
+          > **Index availability differs per platform.** zvec compiles DiskAnn only for
+          > Linux x86_64/aarch64, macOS arm64 and Windows x86_64, and IVF-RaBitQ only for
+          > Linux x86_64 and Windows x86_64. On **macOS Intel** and **Windows ARM64** both
+          > index types are stubbed out and report \`NotSupported\`; every other index
+          > (HNSW, IVF, Flat, Invert, Vamana and the quantized variants) is available.
 
           ### Maven JAR
 

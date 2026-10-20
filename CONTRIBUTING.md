@@ -89,8 +89,11 @@ your IDE, so do not "fix" formatting that the build does not complain about.
 - Conventional commits (`feat:`, `fix:`, `ci:`, `docs:`, `test:`, `build:`);
   explain the *why* in the body.
 - CI must pass: `lint` runs Checkstyle, the `source-test` matrix builds zvec
-  from the submodule and the `vendor-test` matrix builds against prebuilt
-  libraries, each on macOS ARM64, Linux x86_64 and Windows x86_64.
+  from the submodule and runs the suite on macOS ARM64, macOS Intel, Linux
+  x86_64, Windows x86_64 and Windows ARM64; the `vendor-test` matrix does the
+  same against prebuilt libraries dropped into `lib/<platform>/`. That directory
+  is gitignored and empty on a fresh clone, so `vendor-test` skips itself unless
+  a contributor populates it first.
 - Keep both READMEs and the javadoc of anything public up to date — the javadoc
   JAR is published to Maven Central.
 
@@ -127,9 +130,10 @@ is that version without the leading `v` (`v0.7.0` → `0.7.0`).
    regenerate `NOTICE` if needed.
 3. `mvn test` locally (all tests green) and `mvn checkstyle:check`, then push.
 4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. This runs
-   `release.yml`, which builds `zvec_c_api` for all four platforms, verifies the
-   Linux glibc floor and the absence of GPL-only RocksDB code, and publishes a
-   GitHub Release with the C library archives and their `.sha256`.
+   `release.yml`, which builds `zvec_c_api` for all six platforms, verifies the
+   Linux glibc floor, the macOS deployment target, every leg's CPU architecture
+   and the absence of GPL-only RocksDB code, and publishes a GitHub Release with
+   the C library archives and their `.sha256`.
 5. Dry-run the JAR pipeline:
    `gh workflow run publish-jar.yml --repo zvec-ai/zvec-java -f tag=vX.Y.Z -f deploy_central=false`
 6. Deploy for real with `-f deploy_central=true`. This builds the whole artifact
@@ -142,8 +146,8 @@ is that version without the leading `v` (`v0.7.0` → `0.7.0`).
    overwrites or reissues a version, so a mistake costs a version number.
 
 What gets published: the main multi-platform JAR, the `macosx-arm64`,
-`linux-x86_64`, `linux-arm64`, `windows-x86_64` and `nolib` classifier JARs,
-plus sources and javadoc.
+`macosx-x86_64`, `linux-x86_64`, `linux-arm64`, `windows-x86_64`,
+`windows-arm64` and `nolib` classifier JARs, plus sources and javadoc.
 
 Required repository secrets: `CENTRAL_TOKEN_USER`, `CENTRAL_TOKEN_PASSWORD`
 (a Central Portal *user token*, not account credentials), `GPG_SIGNING_KEY`

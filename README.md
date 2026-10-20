@@ -15,7 +15,7 @@ English | [简体中文](README_CN.md)
 - **Cross-platform, zero-config**: native libraries (`libzvec_c_api` + `libjniZvecNative`) are packed into the JAR under `platform-arch` directories and loaded automatically at runtime with no configuration.
 - **High-level wrappers**: type-safe, resource-safe Java objects layered on top of the generated `ZvecNative`.
 - **AutoCloseable resource management**: every object holding native resources implements `AutoCloseable` for use with try-with-resources.
-- **Rich index support**: HNSW, IVF, Flat, Invert (inverted), Vamana, DiskANN and IVF-RaBitQ (zvec &ge; v0.7.0), plus quantized variants (FP16/INT8/INT4/RaBitQ). Platform availability follows zvec itself: DiskANN requires Linux x86_64/ARM64 or macOS ARM64, IVF-RaBitQ requires Linux x86_64; on other platforms the native layer reports `NotSupported`.
+- **Rich index support**: HNSW, IVF, Flat, Invert (inverted), Vamana, DiskANN and IVF-RaBitQ (zvec &ge; v0.7.0), plus quantized variants (FP16/INT8/INT4/RaBitQ). Platform availability follows zvec itself: DiskANN requires Linux x86_64/ARM64, macOS ARM64 or Windows x86_64, and IVF-RaBitQ requires Linux x86_64 or Windows x86_64; on the remaining platforms — notably macOS Intel and Windows ARM64 — the native layer reports `NotSupported`.
 - **Document iteration**: snapshot iterators over collections with output-field selection (`Collection.createIterator`, zvec &ge; v0.7.0).
 - **Jieba FTS out of the box**: the default cppjieba dictionary and HMM model are compiled into the native library (zvec &ge; v0.8.0), so the `jieba` full-text tokenizer needs no setup — nothing to download, extract or point at.
 - **Many data types**: 30+ field types, including sparse/dense vectors of various dimensions.
@@ -59,9 +59,11 @@ The version tracks the bundled zvec native version: `0.7.0` ships zvec v0.7.0.
 |----------|----------|--------------|
 | *(no classifier)* | classes + natives for **all** supported platforms | You want one dependency that runs anywhere. Simplest choice, largest download. |
 | `macosx-arm64` | classes + macOS ARM64 natives | You deploy to a single known platform and want a smaller artifact. |
+| `macosx-x86_64` | classes + macOS Intel natives | Same, for Intel Macs. |
 | `linux-x86_64` | classes + Linux x86_64 natives | Same, for Linux x86_64. |
 | `linux-arm64` | classes + Linux ARM64 natives | Same, for Linux ARM64. |
 | `windows-x86_64` | classes + Windows x86_64 natives | Same, for Windows x86_64. |
+| `windows-arm64` | classes + Windows ARM64 natives | Same, for a native ARM64 JVM on Windows. |
 | `nolib` | classes, **no** natives | You build or ship `zvec_c_api` yourself and point the loader at it (see [How are native libraries loaded?](#how-are-native-libraries-loaded)). |
 
 Single-platform classifiers:
@@ -79,14 +81,22 @@ Single-platform classifiers:
 implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
 ```
 
-Supported platforms: macOS ARM64, Linux x86_64, Linux ARM64 and Windows x86_64.
-The Linux native libraries are built in the `manylinux_2_28` images and need
-glibc 2.27 or newer, so Ubuntu 18.04+, Debian 10+, RHEL/CentOS 8+ and Fedora
-28+ are all covered. The macOS ARM64 libraries carry an 11.0 deployment target
-as of 0.8.0, so macOS 11 (Big Sur) and later are covered; **the published 0.7.0
-macOS libraries were built without one and therefore load only on macOS 15 or
-newer.** Per-index platform availability still follows zvec itself (see
-[Features](#features)).
+Supported platforms: macOS ARM64 and macOS Intel (x86_64), Linux x86_64, Linux
+ARM64, Windows x86_64 and Windows ARM64. The Linux native libraries are built in
+the `manylinux_2_28` images and need glibc 2.27 or newer, so Ubuntu 18.04+,
+Debian 10+, RHEL/CentOS 8+ and Fedora 28+ are all covered. Both macOS libraries
+carry an 11.0 deployment target as of 0.8.0, so macOS 11 (Big Sur) and later are
+covered; **the published 0.7.0 macOS libraries were built without one and
+therefore load only on macOS 15 or newer.**
+
+Two platforms ship a reduced index set, because zvec compiles DiskAnn and
+IVF-RaBitQ only for the architectures listed under [Features](#features): on
+macOS Intel and Windows ARM64 both index types report `NotSupported`. Everything
+else, including the jieba full-text tokenizer, is available on all six.
+
+On Windows on ARM, an x86_64 JVM running under emulation reports `windows-x86_64`
+to JavaCPP and therefore picks up that classifier, which also works; the
+`windows-arm64` classifier is for a native ARM64 JVM.
 
 From here, jump to [Code Examples](#code-examples) — `Zvec.initialize(null)` is
 the only setup call you need.

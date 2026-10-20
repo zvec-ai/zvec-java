@@ -65,20 +65,66 @@ jobs:
             # clang targets the runner's macOS version, and dyld then refuses to
             # load the dylib on anything older.
             cmake_platform_args: '-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'
+            mac_arch: arm64
+            javacpp_platform: macosx-arm64
+          - name: darwin-x64
+            # Intel macOS, the runner upstream zvec builds its own osx-amd64 SDK
+            # on (zvec/.github/workflows/_build_macos_x64_sdk.yml). javacpp names
+            # the platform directory macosx-x86_64, which is what Loader.getPlatform()
+            # resolves to on an Intel JVM, so the bundle lands in the JAR where the
+            # runtime looks for it.
+            # macos-15-intel is the last x86_64 image GitHub offers for macOS and
+            # is announced to retire in August 2027; this leg has to move to a
+            # self-hosted Intel runner (or be dropped) before then.
+            runner: macos-15-intel
+            container: ''
+            cache_abi: host
+            cmake_platform_args: '-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'
+            mac_arch: x86_64
+            javacpp_platform: macosx-x86_64
           - name: linux-x64
             runner: ubuntu-24.04
             # Pinned dated tag, the same batch upstream uses.
             container: 'quay.io/pypa/manylinux_2_28_x86_64:2026.03.01-1'
             cache_abi: manylinux_2_28
+            javacpp_platform: linux-x86_64
           - name: linux-arm64
             runner: ubuntu-24.04-arm
             # Same image family upstream builds its aarch64 SDK in.
             container: 'quay.io/pypa/manylinux_2_28_aarch64:2026.03.01-1'
             cache_abi: manylinux_2_28
+            javacpp_platform: linux-arm64
           - name: windows-x64
             runner: windows-2025
             container: ''
             cache_abi: host
+            msvc_arch: x64
+            # COFF Machine field of every DLL this leg stages: 8664 = AMD64.
+            pe_machine: '8664'
+            javacpp_platform: windows-x86_64
+          - name: windows-arm64
+            # Native Windows on ARM, the runner upstream zvec publishes its
+            # aarch64-pc-windows-msvc SDK from (zvec/_build_prebuilt.yml). The
+            # image ships Maven 3.9.16, an arm64 CPython (so the cmake/ninja
+            # wheels below resolve to win_arm64) and an arm64 JDK 21. javacpp
+            # names the platform directory windows-arm64, matching what
+            # Loader.getPlatform() reports on a native arm64 JVM; an x86_64 JVM
+            # running under emulation reports windows-x86_64 instead and picks
+            # up the other classifier.
+            runner: windows-11-arm
+            container: ''
+            cache_abi: host
+            msvc_arch: arm64
+            # aa64 = ARM64.
+            pe_machine: 'aa64'
+            javacpp_platform: windows-arm64
+            # Temurin publishes no Windows/aarch64 JDK before 21, so this leg
+            # cannot use the 11 the others do. It changes only the JVM that runs
+            # Maven and javacpp: the sources still compile to 1.8 bytecode via
+            # maven.compiler.source/target in pom.xml, and the Java classes this
+            # leg produces are not the shipped ones - only its natives are
+            # staged, and build-jar recompiles the classes on linux-x86_64.
+            java_version: '21'
 
     steps:
       - name: Checkout code
@@ -93,11 +139,11 @@ jobs:
           ref: ${{ inputs.tag }}
           submodules: recursive
 
-      - name: Set up JDK 11
+      - name: Set up JDK ${{ matrix.java_version || '11' }}
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '11'
+          java-version: ${{ matrix.java_version || '11' }}
           cache: maven
 
       # The manylinux image ships no Maven, and the runner's preinstalled
@@ -176,6 +222,11 @@ jobs:
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1 (pinned by SHA; what it builds feeds the cache the publishing job reuses)
+        with:
+          # arm64 on the windows-arm64 leg; the action defaults to x64, which on
+          # an ARM runner would quietly produce an AMD64 DLL - and javacpp would
+          # then link the JNI glue against it and stage an unloadable bundle.
+          arch: ${{ matrix.msvc_arch || 'x64' }}
 
       - name: Install CMake and Ninja (Windows)
         if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
@@ -302,6 +353,17 @@ jobs:
           fi
           PLATNAME=$(basename "$PLATDIR")
           echo "JavaCPP platform: $PLATNAME"
+          # The aggregation job copies these directories by name alone, so a leg
+          # whose javacpp resolved a platform other than the one the matrix
+          # declares - an x86_64 JVM under emulation on windows-11-arm, say -
+          # would overwrite a sibling leg's bundle instead of adding its own, and
+          # the symptom would surface in build-jar as a missing classifier. Fail
+          # on the leg that is actually wrong.
+          EXPECT="${{ matrix.javacpp_platform }}"
+          if [ "$PLATNAME" != "$EXPECT" ]; then
+            echo "::error::javacpp staged '$PLATNAME' but this leg must produce '$EXPECT'"
+            exit 1
+          fi
           mkdir -p "staging/$PLATNAME"
           # Only runtime shared libraries belong in the JAR; the MSVC import
           # library and export file the compiler drops next to the glue would
@@ -337,6 +399,51 @@ jobs:
             echo "$lib: LC_BUILD_VERSION minos = ${MINOS:-none}"
             if [ -z "$MINOS" ] || [ "${MINOS%%.*}" -gt "$LIMIT" ]; then
               echo "::error::$lib targets macOS ${MINOS:-unknown} but the documented floor is macOS $LIMIT.0"
+              exit 1
+            fi
+          done
+
+      - name: Verify the macOS natives carry this leg's architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # darwin-arm64 and darwin-x64 each stage a libzvec_c_api.dylib and a
+          # libjniZvecNative.dylib, and the aggregation job below copies them by
+          # platform directory name alone. A CMAKE_OSX_ARCHITECTURES that did not
+          # reach the C compiler - or a javacpp that passed the wrong -arch to the
+          # C++ one - would put an Apple Silicon dylib into the macosx-x86_64
+          # bundle, and the consumer would only find out at load time with
+          # "mach-o file, but is an incompatible architecture". Both libraries
+          # have to be right, so check every dylib this leg staged.
+          EXPECT="${{ matrix.mac_arch }}"
+          for lib in staging/*/*.dylib; do
+            ARCHS=$(lipo -archs "$lib")
+            echo "$lib: lipo -archs = ${ARCHS:-none} (expect an $EXPECT slice)"
+            if ! printf '%s\n' "$ARCHS" | tr ' ' '\n' | grep -Fxq "$EXPECT"; then
+              echo "::error::$lib has no $EXPECT slice (found: ${ARCHS:-none})"
+              exit 1
+            fi
+          done
+
+      - name: Verify the Windows natives carry this leg's architecture
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # The Windows counterpart of the check above: an msvc-dev-cmd left at
+          # its x64 default produces AMD64 binaries on the windows-11-arm runner,
+          # which no arm64 JVM can load. Read the COFF header of every staged DLL
+          # rather than trusting the toolchain: e_lfanew (4-byte little-endian at
+          # 0x3C) points at the PE signature, whose Machine field follows 4 bytes
+          # later (8664 = AMD64, aa64 = ARM64). od + awk because Git Bash is the
+          # only tool guaranteed on every Windows runner; NR==1 keeps this working
+          # on a BSD od, which prints a trailing blank line GNU od omits.
+          EXPECT="${{ matrix.pe_machine }}"
+          for dll in staging/*/*.dll; do
+            OFF=$(od -An -tu1 -j 60 -N 4 "$dll" | awk 'NR==1{print $1 + $2*256 + $3*65536 + $4*16777216}')
+            MACH=$(od -An -tu1 -j "$((OFF + 4))" -N 2 "$dll" | awk 'NR==1{printf "%04x", $1 + $2*256}')
+            echo "$dll: COFF Machine = 0x${MACH:-?} (expected 0x$EXPECT)"
+            if [ "$MACH" != "$EXPECT" ]; then
+              echo "::error::$dll is 0x${MACH:-?} but this leg must build 0x$EXPECT - check the msvc-dev-cmd arch input"
               exit 1
             fi
           done
@@ -512,7 +619,9 @@ jobs:
           # an UnsatisfiedLinkError on the consumer's machine.
           # Exact JavaCPP platform directory names: a bare "linux" prefix would
           # let a JAR carrying only linux-x86_64 satisfy the linux-arm64 check.
-          for entry in macosx-arm64:dylib linux-x86_64:so linux-arm64:so windows-x86_64:dll; do
+          for entry in macosx-arm64:dylib macosx-x86_64:dylib \
+                       linux-x86_64:so linux-arm64:so \
+                       windows-x86_64:dll windows-arm64:dll; do
             p="${entry%%:*}"
             ext="${entry##*:}"
             for lib in jniZvecNative zvec_c_api; do
@@ -583,13 +692,15 @@ jobs:
           # README says so, and this step is what keeps that statement true as
           # zvec evolves. grep -a rather than strings/readelf/objdump: grep is
           # present in every image we build in and works on ELF, Mach-O and PE
-          # alike, so all four platforms are covered by this x86_64 linux job.
+          # alike, so all six platforms are covered by this x86_64 linux job.
           GPL_PATTERN='range_tree|locktree|RangeTree|PessimisticTransaction|percona'
           for LIBDIR in \
             target/classes/org/zvec/binding/linux-x86_64 \
             src/main/resources/org/zvec/binding/macosx-arm64 \
+            src/main/resources/org/zvec/binding/macosx-x86_64 \
             src/main/resources/org/zvec/binding/linux-arm64 \
-            src/main/resources/org/zvec/binding/windows-x86_64; do
+            src/main/resources/org/zvec/binding/windows-x86_64 \
+            src/main/resources/org/zvec/binding/windows-arm64; do
             if [ ! -d "$LIBDIR" ]; then
               echo "::error::$LIBDIR is missing - nothing to license-check"
               exit 1

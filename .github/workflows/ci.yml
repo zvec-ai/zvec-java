@@ -53,19 +53,44 @@ jobs:
   source-test:
     name: Source (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
-    # Longest observed leg is the linux-x64 zvec build at ~48m; the ceiling
-    # exists to stop a hung toolchain from burning runner minutes for 6 hours.
-    timeout-minutes: 90
+    # Longest observed leg is the linux-x64 zvec build at ~48m; the two extra
+    # platforms build in about the same time upstream (windows-arm64 ~42m,
+    # osx-amd64 ~41m). The ceiling exists to stop a hung toolchain from burning
+    # runner minutes for 6 hours.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: macos-arm64
             runner: macos-15
+          - name: macos-x64
+            # Intel macOS, the runner upstream zvec builds its own osx-amd64 SDK
+            # on (zvec/.github/workflows/_build_macos_x64_sdk.yml).
+            # macos-15-intel is the last x86_64 macOS image Actions offers and is
+            # slated for retirement in August 2027; this leg has to be dropped or
+            # moved to a self-hosted Intel runner then, and the macosx-x86_64
+            # classifier with it unless upstream keeps shipping that SDK.
+            runner: macos-15-intel
+            # Without the deployment target clang aims at the runner's own macOS
+            # and dyld then refuses to load the dylib on anything older; without
+            # the architecture an Apple-toolchain default could creep in. Both
+            # values are the ones upstream uses for this platform.
+            cmake_platform_args: '-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'
           - name: linux-x64
             runner: ubuntu-24.04
           - name: windows-x64
             runner: windows-2025
+          - name: windows-arm64
+            # Native Windows on ARM, the runner upstream zvec publishes its
+            # aarch64-pc-windows-msvc SDK from (zvec/_build_prebuilt.yml).
+            runner: windows-11-arm
+            msvc_arch: arm64
+            # Temurin ships no Windows/aarch64 JDK before 21, so this leg cannot
+            # use the 11 the others do. It only changes the JVM that runs Maven:
+            # the sources still compile to 1.8 bytecode through
+            # maven.compiler.source/target in pom.xml.
+            java_version: '21'
 
     steps:
       - name: Checkout code
@@ -74,11 +99,11 @@ jobs:
           submodules: recursive
 
       # --- Set up Java ---
-      - name: Set up JDK 11
+      - name: Set up JDK ${{ matrix.java_version || '11' }}
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '11'
+          java-version: ${{ matrix.java_version || '11' }}
           cache: maven
 
       # --- Version-anchored cache: keyed by the zvec submodule commit ---
@@ -116,6 +141,10 @@ jobs:
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1 (pinned by SHA; dependabot keeps it current)
+        with:
+          # arm64 on the windows-arm64 leg; the action defaults to x64, which
+          # would silently cross-compile an x64 toolchain on an ARM runner.
+          arch: ${{ matrix.msvc_arch || 'x64' }}
 
       - name: Install CMake and Ninja (Windows)
         if: runner.os == 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
@@ -125,6 +154,8 @@ jobs:
       # --- Build C-API library ---
       - name: Build C-API library (Unix)
         if: runner.os != 'Windows' && steps.cache-zvec.outputs.cache-hit != 'true'
+        env:
+          ZVEC_PLATFORM_ARGS: ${{ matrix.cmake_platform_args || '' }}
         run: |
           NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
           cd zvec
@@ -132,6 +163,7 @@ jobs:
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_C_BINDINGS=ON \
+            $ZVEC_PLATFORM_ARGS \
             -G Ninja
           cmake --build . -j$NPROC --target zvec_c_api
           touch .zvec-build-ok

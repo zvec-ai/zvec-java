@@ -4,9 +4,11 @@
 # org.duckdb:duckdb_jdbc. Outputs:
 #
 #   target/zvec-java-<version>-macosx-arm64.jar     (classes + that platform's
-#   target/zvec-java-<version>-linux-x86_64.jar       natives only)
+#   target/zvec-java-<version>-macosx-x86_64.jar      natives only)
+#   target/zvec-java-<version>-linux-x86_64.jar
 #   target/zvec-java-<version>-linux-arm64.jar
 #   target/zvec-java-<version>-windows-x86_64.jar
+#   target/zvec-java-<version>-windows-arm64.jar
 #   target/zvec-java-<version>-nolib.jar            (classes, no natives)
 #
 # Natives inside the classifier JARs are normalized to the JavaCPP package
@@ -37,7 +39,12 @@ cd "$PROJECT_DIR"
 CLASSES_DIR="target/classes"
 TARGET_DIR="target"
 PKG="org/zvec/binding"
-PLATFORMS="macosx-arm64 linux-x86_64 linux-arm64 windows-x86_64"
+# The JavaCPP platform names, i.e. exactly what Loader.getPlatform() reports on a
+# matching JVM: macosx-arm64 (Apple Silicon), macosx-x86_64 (Intel), linux-x86_64,
+# linux-arm64, windows-x86_64 and windows-arm64. Adding a platform here also means
+# adding it to the release-natives profile in pom.xml and to both publish
+# workflows' matrices, or --require-all fails the release.
+PLATFORMS="macosx-arm64 macosx-x86_64 linux-x86_64 linux-arm64 windows-x86_64 windows-arm64"
 
 if [ ! -d "$CLASSES_DIR" ]; then
   echo "error: $CLASSES_DIR not found - run 'mvn package' first" >&2
