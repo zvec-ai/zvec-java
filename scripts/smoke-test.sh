@@ -15,16 +15,16 @@
 # to prove the shipped .so files really load there.
 #
 # Usage:
-#   scripts/smoke-test.sh --jar target/zvec-java-0.8.0-SNAPSHOT.jar
-#   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0
-#   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0 --classifier linux-arm64
-#   scripts/smoke-test.sh --jar zvec-java-0.7.0-nolib.jar --lib-dir /opt/zvec/lib
-#   scripts/smoke-test.sh --jar target/zvec-java-0.8.0-SNAPSHOT.jar --expect-version v0.8.0-beta2
+#   scripts/smoke-test.sh --jar target/zvec-java-0.8.0.jar
+#   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.8.0
+#   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.8.0 --classifier linux-arm64
+#   scripts/smoke-test.sh --jar zvec-java-0.8.0-nolib.jar --lib-dir /opt/zvec/lib
+#   scripts/smoke-test.sh --jar target/zvec-java-0.8.0.jar --expect-version v0.8.0
 #
 # Options:
 #   --jar PATH         the zvec-java JAR to test
 #   --repo DIR         a Maven-layout directory (contains org/zvec/zvec-java/...)
-#   --version V        version to resolve out of --repo (default: 0.7.0)
+#   --version V        version to resolve out of --repo (default: 0.8.0)
 #   --classifier C     resolve a single-platform classifier JAR from --repo
 #   --javacpp PATH     javacpp JAR; auto-resolved from ~/.m2, mvn or repo1 if omitted
 #   --lib-dir DIR      natives dir for a nolib JAR, passed as -Dzvec.native.path
@@ -38,7 +38,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="$SCRIPT_DIR/smoke-test/SmokeTest.java"
 CENTRAL_BASE="https://repo1.maven.org/maven2"
 
-JAR="" REPO="" VERSION="0.7.0" CLASSIFIER="" JAVACPP="" LIB_DIR="" KEEP=0
+JAR="" REPO="" VERSION="0.8.0" CLASSIFIER="" JAVACPP="" LIB_DIR="" KEEP=0
 EXPECT_VERSION=""
 WORK="$(mktemp -d)"
 

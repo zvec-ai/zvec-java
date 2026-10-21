@@ -34,14 +34,14 @@ configuration.
 <dependency>
     <groupId>org.zvec</groupId>
     <artifactId>zvec-java</artifactId>
-    <version>0.7.0</version>
+    <version>0.8.0</version>
 </dependency>
 ```
 
 **Gradle**
 
 ```groovy
-implementation 'org.zvec:zvec-java:0.7.0'
+implementation 'org.zvec:zvec-java:0.8.0'
 ```
 
 `org.bytedeco:javacpp` comes in transitively, so you do not need to declare it.
@@ -53,7 +53,8 @@ The public API lives in the `org.zvec.binding` package: `Zvec`, `Collection`,
 
 ### Picking an artifact
 
-The version tracks the bundled zvec native version: `0.7.0` ships zvec v0.7.0.
+The version tracks the bundled zvec native version: `0.8.0` ships zvec
+v0.8.0-beta2, `0.7.0` ships zvec v0.7.0.
 
 | Artifact | Contents | Pick it when |
 |----------|----------|--------------|
@@ -72,13 +73,13 @@ Single-platform classifiers:
 <dependency>
     <groupId>org.zvec</groupId>
     <artifactId>zvec-java</artifactId>
-    <version>0.7.0</version>
+    <version>0.8.0</version>
     <classifier>linux-x86_64</classifier>
 </dependency>
 ```
 
 ```groovy
-implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
+implementation 'org.zvec:zvec-java:0.8.0:linux-x86_64'
 ```
 
 Supported platforms: macOS ARM64 and macOS Intel (x86_64), Linux x86_64, Linux
@@ -184,7 +185,7 @@ The packaged fat JAR **already embeds the native library for the current platfor
 
 ```bash
 mvn package -DskipTests
-java -jar target/zvec-java-0.8.0-SNAPSHOT-with-dependencies.jar
+java -jar target/zvec-java-0.8.0-with-dependencies.jar
 ```
 
 ### Smoke-test a built artifact
@@ -196,12 +197,12 @@ and jieba full-text search. It needs a JDK and nothing else — no Docker, no
 Maven, no zvec checkout.
 
 ```bash
-scripts/smoke-test.sh --jar target/zvec-java-0.8.0-SNAPSHOT.jar
+scripts/smoke-test.sh --jar target/zvec-java-0.8.0.jar
 
 # Or resolve the JAR out of a Maven-layout directory, e.g. a Central Portal
 # deployment bundle downloaded before publishing it
-scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0
-scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0 --classifier linux-arm64
+scripts/smoke-test.sh --repo /tmp/central-staging --version 0.8.0
+scripts/smoke-test.sh --repo /tmp/central-staging --version 0.8.0 --classifier linux-arm64
 ```
 
 To prove the shipped `.so` files really load on an older distro, run it on a

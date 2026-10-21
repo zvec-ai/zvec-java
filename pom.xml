@@ -10,13 +10,12 @@
          The Java package name org.zvec.binding is aligned with the groupId prefix. -->
     <groupId>org.zvec</groupId>
     <artifactId>zvec-java</artifactId>
-    <!-- Version tracks the bundled zvec native version (here zvec
-         v0.8.0-beta2), matching the zvec release scheme. Binding-only fixes
-         bump the third segment (rocksdbjni precedent). Between releases the
-         version is a -SNAPSHOT: 0.7.0 on Maven Central is the v0.7.0 build,
-         and Central never lets a version be rebuilt from a different
-         submodule, so main must not claim it. -->
-    <version>0.8.0-SNAPSHOT</version>
+    <!-- Version tracks the bundled zvec native version, matching the zvec
+         release scheme. Binding-only fixes bump the third segment (rocksdbjni
+         precedent). Between releases the version is a -SNAPSHOT: a version on
+         Maven Central is that exact build, and Central never lets it be rebuilt
+         from a different submodule, so main must not claim a published one. -->
+    <version>0.8.0</version>
     <packaging>jar</packaging>
 
     <name>zvec-java</name>

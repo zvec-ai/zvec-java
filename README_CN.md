@@ -31,14 +31,14 @@
 <dependency>
     <groupId>org.zvec</groupId>
     <artifactId>zvec-java</artifactId>
-    <version>0.7.0</version>
+    <version>0.8.0</version>
 </dependency>
 ```
 
 **Gradle**
 
 ```groovy
-implementation 'org.zvec:zvec-java:0.7.0'
+implementation 'org.zvec:zvec-java:0.8.0'
 ```
 
 `org.bytedeco:javacpp` 会作为传递依赖自动引入,无需自己声明。运行环境要求 Java 8 及以上。
@@ -47,7 +47,7 @@ implementation 'org.zvec:zvec-java:0.7.0'
 
 ### 选择哪个产物
 
-版本号跟随内置的 zvec 原生库版本:`0.7.0` 对应 zvec v0.7.0。
+版本号跟随内置的 zvec 原生库版本:`0.8.0` 对应 zvec v0.8.0-beta2,`0.7.0` 对应 zvec v0.7.0。
 
 | 产物 | 内容 | 适用场景 |
 |------|------|----------|
@@ -66,13 +66,13 @@ implementation 'org.zvec:zvec-java:0.7.0'
 <dependency>
     <groupId>org.zvec</groupId>
     <artifactId>zvec-java</artifactId>
-    <version>0.7.0</version>
+    <version>0.8.0</version>
     <classifier>linux-x86_64</classifier>
 </dependency>
 ```
 
 ```groovy
-implementation 'org.zvec:zvec-java:0.7.0:linux-x86_64'
+implementation 'org.zvec:zvec-java:0.8.0:linux-x86_64'
 ```
 
 受支持平台:macOS ARM64、macOS Intel(x86_64)、Linux x86_64、Linux ARM64、Windows x86_64、Windows ARM64。Linux 原生库在 `manylinux_2_28` 镜像中构建,要求 glibc 2.27 及以上,因此 Ubuntu 18.04+、Debian 10+、RHEL/CentOS 8+、Fedora 28+ 均可使用。两个 macOS 原生库从 0.8.0 起都以 11.0 为部署目标,即 macOS 11(Big Sur)及以上均可使用;**已发布的 0.7.0 macOS 原生库构建时没有指定部署目标,因此只能在 macOS 15 及以上加载。**
@@ -159,7 +159,7 @@ mvn test -Dzvec.home=/path/to/zvec
 
 ```bash
 mvn package -DskipTests
-java -jar target/zvec-java-0.8.0-SNAPSHOT-with-dependencies.jar
+java -jar target/zvec-java-0.8.0-with-dependencies.jar
 ```
 
 ### 对构建产物做冒烟测试
@@ -170,12 +170,12 @@ JavaCPP 从 JAR 中解压出当前平台的原生库,然后真实地创建一个
 Maven、也不需要 zvec 源码。
 
 ```bash
-scripts/smoke-test.sh --jar target/zvec-java-0.8.0-SNAPSHOT.jar
+scripts/smoke-test.sh --jar target/zvec-java-0.8.0.jar
 
 # 也可以从 Maven 目录布局中解析 JAR,例如发布前从 Central Portal 下载的
 # deployment bundle
-scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0
-scripts/smoke-test.sh --repo /tmp/central-staging --version 0.7.0 --classifier linux-arm64
+scripts/smoke-test.sh --repo /tmp/central-staging --version 0.8.0
+scripts/smoke-test.sh --repo /tmp/central-staging --version 0.8.0 --classifier linux-arm64
 ```
 
 想证明产出的 `.so` 真的能在老发行版上加载,就要在 glibc 不高于文档所述下限的机器上

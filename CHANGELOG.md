@@ -5,10 +5,12 @@ Notable changes to zvec-java are recorded here. The format follows
 tracks the bundled zvec native version: `0.7.0` ships the libraries built from
 zvec `v0.7.0`. A binding-only fix bumps the third segment.
 
-## [Unreleased]
+## [0.8.0]
 
-Tracks zvec `v0.8.0-beta2` (`8397071`); the artifact version is
-`0.8.0-SNAPSHOT` until the release is cut.
+Cut from the zvec `v0.8.0-beta2` C API (`8397071`) and published to Maven
+Central as `org.zvec:zvec-java:0.8.0`. Upstream had tagged no final `v0.8.0` at
+the time, so the bundled natives are the beta2 build while the artifact claims
+`0.8.0`; the next release is therefore `0.8.1`.
 
 ### Added
 
@@ -237,5 +239,5 @@ First release, cut from the zvec v0.7.0 C API and published to Maven Central as
   hand-written sources, and every job declares an explicit `timeout-minutes`.
 - Third-party actions are pinned by commit SHA.
 
-[Unreleased]: https://github.com/zvec-ai/zvec-java/compare/v0.7.0...HEAD
+[0.8.0]: https://github.com/zvec-ai/zvec-java/releases/tag/v0.8.0
 [0.7.0]: https://github.com/zvec-ai/zvec-java/releases/tag/v0.7.0
