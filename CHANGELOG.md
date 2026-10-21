@@ -47,11 +47,16 @@ the time, so the bundled natives are the beta2 build while the artifact claims
 
 ### Changed
 
-- The `zvec` submodule moved from `v0.7.0` to `v0.8.0-beta2`. The native
-  libraries report `v0.8.0-beta2`, so `Zvec.getVersion()` returns that string
-  while `getVersionMajor/Minor/Patch()` still return 0.8.0 - zvec's
-  `cmake/version.cmake` reads only the leading `vX.Y.Z`, so a beta suffix
-  never reaches the numeric components.
+- The `zvec` submodule moved from `v0.7.0` to `v0.8.0-beta2`. The shipped
+  natives still report `v0.8.0` rather than the beta string: CI checks the
+  submodule out detached and without tags, so `git describe` resolves nothing
+  there and both release workflows feed `-DOVERRIDE_GIT_DESCRIBE` from our own
+  tag instead, which `zvec/cmake/version.cmake` prefers over the describe.
+  `Zvec.getVersion()` therefore returns `v0.8.0` and
+  `getVersionMajor/Minor/Patch()` return 0.8.0 — the smoke tests assert both on
+  linux-x86_64 and linux-arm64. Only a library built from a local tagged
+  checkout reports `v0.8.0-beta2`, and the numeric components come out 0.8.0
+  either way, since `version.cmake` reads just the leading `vX.Y.Z`.
 - The `v0.8.0-beta` to `v0.8.0-beta2` part of that move needed no binding,
   gating or licensing work: `src/include/zvec/c_api.h` (the header JavaCPP
   parses), the top-level `CMakeLists.txt` and `cmake/` (where the DiskAnn and
