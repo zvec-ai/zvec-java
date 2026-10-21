@@ -159,8 +159,12 @@ mvn test -Dzvec.home=/path/to/zvec
 
 ```bash
 mvn package -DskipTests
-java -jar target/zvec-java-0.8.0-with-dependencies.jar
+java -jar target/zvec-java-0.8.1-SNAPSHOT-with-dependencies.jar
 ```
+
+`0.8.1-SNAPSHOT` 是 `main` 在两次发布之间使用的版本号,指的是本地这份 checkout
+构建出来的 JAR 文件名 —— 它不在 Maven Central 上,也无法作为依赖解析。要引入依赖,
+请用[安装](#安装)小节里的已发布版本,那里的坐标永远不带 `-SNAPSHOT`。
 
 ### 对构建产物做冒烟测试
 
@@ -170,7 +174,7 @@ JavaCPP 从 JAR 中解压出当前平台的原生库,然后真实地创建一个
 Maven、也不需要 zvec 源码。
 
 ```bash
-scripts/smoke-test.sh --jar target/zvec-java-0.8.0.jar
+scripts/smoke-test.sh --jar target/zvec-java-0.8.1-SNAPSHOT.jar
 
 # 也可以从 Maven 目录布局中解析 JAR,例如发布前从 Central Portal 下载的
 # deployment bundle

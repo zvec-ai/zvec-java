@@ -185,8 +185,13 @@ The packaged fat JAR **already embeds the native library for the current platfor
 
 ```bash
 mvn package -DskipTests
-java -jar target/zvec-java-0.8.0-with-dependencies.jar
+java -jar target/zvec-java-0.8.1-SNAPSHOT-with-dependencies.jar
 ```
+
+`0.8.1-SNAPSHOT` is the version `main` builds under between releases. It names
+the JAR this checkout produces — it is not on Maven Central and cannot be
+resolved as a dependency. For that, use the published version in the
+[Installation](#installation) snippets, which never carries `-SNAPSHOT`.
 
 ### Smoke-test a built artifact
 
@@ -197,7 +202,7 @@ and jieba full-text search. It needs a JDK and nothing else — no Docker, no
 Maven, no zvec checkout.
 
 ```bash
-scripts/smoke-test.sh --jar target/zvec-java-0.8.0.jar
+scripts/smoke-test.sh --jar target/zvec-java-0.8.1-SNAPSHOT.jar
 
 # Or resolve the JAR out of a Maven-layout directory, e.g. a Central Portal
 # deployment bundle downloaded before publishing it

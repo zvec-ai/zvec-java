@@ -5,6 +5,11 @@ Notable changes to zvec-java are recorded here. The format follows
 tracks the bundled zvec native version: `0.7.0` ships the libraries built from
 zvec `v0.7.0`. A binding-only fix bumps the third segment.
 
+## [Unreleased]
+
+Tracks zvec `v0.8.0-beta2` (`8397071`); the artifact version is
+`0.8.1-SNAPSHOT` until the release is cut.
+
 ## [0.8.0]
 
 Cut from the zvec `v0.8.0-beta2` C API (`8397071`) and published to Maven

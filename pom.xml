@@ -15,7 +15,7 @@
          precedent). Between releases the version is a -SNAPSHOT: a version on
          Maven Central is that exact build, and Central never lets it be rebuilt
          from a different submodule, so main must not claim a published one. -->
-    <version>0.8.0</version>
+    <version>0.8.1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>zvec-java</name>

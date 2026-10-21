@@ -15,11 +15,11 @@
 # to prove the shipped .so files really load there.
 #
 # Usage:
-#   scripts/smoke-test.sh --jar target/zvec-java-0.8.0.jar
+#   scripts/smoke-test.sh --jar target/zvec-java-0.8.1-SNAPSHOT.jar
 #   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.8.0
 #   scripts/smoke-test.sh --repo /tmp/central-staging --version 0.8.0 --classifier linux-arm64
 #   scripts/smoke-test.sh --jar zvec-java-0.8.0-nolib.jar --lib-dir /opt/zvec/lib
-#   scripts/smoke-test.sh --jar target/zvec-java-0.8.0.jar --expect-version v0.8.0
+#   scripts/smoke-test.sh --jar target/zvec-java-0.8.1-SNAPSHOT.jar --expect-version v0.8.0-beta2
 #
 # Options:
 #   --jar PATH         the zvec-java JAR to test
