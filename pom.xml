@@ -65,7 +65,7 @@
              for Windows on ARM with MSVC instead of falling back to MinGW g++.
              Keep in sync with the version quoted in both READMEs. -->
         <javacpp.version>1.5.14</javacpp.version>
-        <junit.version>5.10.2</junit.version>
+        <junit.version>5.14.4</junit.version>
 
         <!-- Location of the Zvec core (git submodule at ./zvec). Override for local
              builds that reuse a sibling checkout, e.g. -Dzvec.home=/path/to/zvec -->
